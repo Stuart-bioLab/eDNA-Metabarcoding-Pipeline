@@ -9,5 +9,5 @@ The script then creates a manifest for the pipeline.
 *This might be implemented in the pipeline with an option to give just a data directory*.
 
 Notes:
-There are two entries for SCD-UPL in the metadata. The entries are near identical but seem to be distinct samples. I am going to ignore these files until we figure out how to resolve them.  
-We only have Fall data sequenced right now.
+We only have Fall data sequenced right now.  
+There are a lot of duplicate samples in the metadata I think we need to have a conversation about this.
