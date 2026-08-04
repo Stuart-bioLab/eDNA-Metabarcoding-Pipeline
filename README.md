@@ -1,6 +1,6 @@
 # Fox-River-eDNA-metabarcoding
 An eDNA metabarcoding project focused on identifying and analyzing biodiversity through environmental DNA sequencing. This workflow uses molecular markers and bioinformatics approaches to detect species from environmental samples without direct organism collection.
-The pipeline architecture is based on those built by myself (https://github.com/bmoginot/Fox-River-eDNA-Pipeline) and R. Patel (https://github.com/richapatel138/WildMileeDNAPipeline).
+The pipeline architecture is based on those built by B. Moginot (https://github.com/bmoginot/Fox-River-eDNA-Pipeline) and R. Patel (https://github.com/richapatel138/WildMileeDNAPipeline).
 
 # ETL framework
 Data are in disparate folders, not organized by study. The pipeline needs a manifest which lists the paths to read files in a text file. The metadata maps each sample to a study(s), so it can be used to figure out where the read files for the samples are located.
