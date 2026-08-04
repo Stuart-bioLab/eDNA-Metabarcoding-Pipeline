@@ -7,3 +7,7 @@ Data are in disparate folders, not organized by study. The pipeline needs a mani
 The script `find_data.py` takes the metadata, study type, and read data directory as input. It subsets the metadata for samples from the target study. It then searches the input directory and pulls out paths to files that are labelled with the sample ids from the target study.
 The script then creates a manifest for the pipeline.
 *This might be implemented in the pipeline with an option to give just a data directory*.
+
+Notes:
+There are two entries for SCD-UPL in the metadata. The entries are near identical but seem to be distinct samples. I am going to ignore these files until we figure out how to resolve them.  
+We only have Fall data sequenced right now.
