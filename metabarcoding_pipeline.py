@@ -43,55 +43,55 @@ def get_args(config):
     )
 
     parser.add_argument(
-        "--forward_primer",
+        "--forward-primer",
         default=config["PRIMERS"]["forward"],
         help="forward primer sequence"
     )
 
     parser.add_argument(
-        "--reverse_primer",
+        "--reverse-primer",
         default=config["PRIMERS"]["reverse"],
         help="reverse primer sequence"
     )
 
     parser.add_argument(
-        "--trim_forward",
+        "--trim-forward",
         default=config["PARAMETERS"]["trim_forward"],
         help="quality info for dada2. where to trim forward reads before denoising"
     )
 
     parser.add_argument(
-        "--trim_reverse",
+        "--trim-reverse",
         default=config["PARAMETERS"]["trim_reverse"],
         help="quality info for dada2. where to trim reverse reads before denoising"
     )
 
     parser.add_argument(
-        "--trunc_forward",
+        "--trunc-forward",
         default=config["PARAMETERS"]["trunc_forward"],
         help="quality info for dada2. where to truncate forward reads before denoising"
     )
 
     parser.add_argument(
-        "--trunc_reverse",
+        "--trunc-reverse",
         default=config["PARAMETERS"]["trunc_reverse"],
         help="quality info for dada2. where to truncate reverse reads before denoising"
     )
     
     parser.add_argument(
-        "--database_tax",
+        "--database-tax",
         default=config["PATHS"]["database_tax"],
         help="refrence database taxa file in QIIME format for vsearch and naive bayes taxonomy assignment steps"
     )
     
     parser.add_argument(
-        "--database_seq",
+        "--database-seq",
         default=config["PATHS"]["database_seq"],
         help="refrence database seq file in QIIME format for vsearch and naive bayes taxonomy assignment steps"
     )
 
     parser.add_argument( # YOU CAN GET RID OF THIS LATER
-        "--asv_seqs",
+        "--asv-seqs",
         help="for development: skip up to taxonomy assignment if denoised seqs provided"
     )
 
@@ -308,17 +308,17 @@ def main():
         reads_archive = Path(args.archive).resolve() # get archive path
     logger.info(f"loaded archive: {reads_archive}")
 
-    if not args.asv_seqs:
-        primers = args.forward_primer, args.reverse_primer
+    if not args.asv-seqs:
+        primers = args.forward-primer, args.reverse-primer
         trim_dir = outdir / "trimmed_reads" # store trimmed read file here
         trim_dir.mkdir()
         trimmed_reads = trim_reads(logger, primers, reads_archive, threads, trim_dir)
 
         dada_params = { # dada2 parameters from command line arguments
-            "trim_forward": args.trim_forward,
-            "trim_reverse": args.trim_reverse,
-            "trunc_forward": args.trunc_forward,
-            "trunc_reverse": args.trunc_reverse,
+            "trim_forward": args.trim-forward,
+            "trim_reverse": args.trim-reverse,
+            "trunc_forward": args.trunc-forward,
+            "trunc_reverse": args.trunc-reverse,
             "threads": threads
         }
         dada_dir = outdir / "dada2" # store deniosing files here
@@ -328,8 +328,8 @@ def main():
         logger.info("skipping denoising and using provided seqs instead")
         asv_seqs = args.asv_seqs
 
-    crabs_ref_tax = args.database_tax
-    crabs_ref_seq = args.database_seq
+    crabs_ref_tax = args.database-tax
+    crabs_ref_seq = args.database-seq
     logger.info("loaded crabs reference db files")
     vsearch_dir = outdir / "vsearch"
     vsearch_dir.mkdir()
