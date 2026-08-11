@@ -77,8 +77,19 @@ def get_args(config):
         default=config["PARAMETERS"]["trunc_reverse"],
         help="quality info for dada2. where to truncate reverse reads before denoising"
     )
-    # parser.add_argument("-dt", "--database_tax", help="refrence database taxa file in QIIME format for vsearch and naive bayes taxonomy assignment")
-    # parser.add_argument("-ds", "--database_seq", help="refrence database deq file in QIIME format for vsearch and naive bayes taxonomy assignment")
+    
+    parser.add_argument(
+        "--database_tax",
+        default=config["PATHS"]["database_tax"],
+        help="refrence database taxa file in QIIME format for vsearch and naive bayes taxonomy assignment steps"
+    )
+    
+    parser.add_argument(
+        "--database_seq",
+        default=config["PATHS"]["database_seq"],
+        help="refrence database seq file in QIIME format for vsearch and naive bayes taxonomy assignment steps"
+    )
+
     # parser.add_argument("-bdt", "--blast_database_tax", help="BLAST database taxa file in QIIME format for BLAST taxonomy assignment")
     # parser.add_argument("-bds", "--blast_database_seq", help="BLAST database deq file in QIIME format for BLAST taxonomy assignment")
 
