@@ -270,7 +270,7 @@ def run_vsearch(logger, asv_seqs, ref_tax, ref_seq, threads, outdir):
                 "--p-perc-identity", "1.0",
                 "--p-min-consensus", "0.94",
                 "--p-threads", threads,
-                "--o-classification", out_taxa,
+                "--o-classification", out_tax,
                 "--o-search-results", top_hits
             ],
             capture_output=True,
@@ -284,7 +284,7 @@ def run_vsearch(logger, asv_seqs, ref_tax, ref_seq, threads, outdir):
         sys.exit(1)
     logger.info("DONE running vsearch")
 
-    return out_taxa
+    return out_tax
 
 def main():
     config = load_config("config.ini")
@@ -326,7 +326,8 @@ def main():
         asv_seqs, feat_table = denoise_reads(logger, trimmed_reads, dada_params, dada_dir)
     else:
         logger.info("skipping denoising and using provided seqs instead")
-        asv_seqs = args.asv_seqs
+        asv_seqs = Path(args.asv_seqs).resolve()
+        logger.info(f"loaded seqs: {asv_seqs}")
 
     crabs_ref_tax = args.database_tax
     crabs_ref_seq = args.database_seq
