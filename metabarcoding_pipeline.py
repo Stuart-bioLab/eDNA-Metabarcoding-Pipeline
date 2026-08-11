@@ -37,7 +37,7 @@ def get_args(config):
         help="Number of CPU cores to use for applicable functions"
     )
 
-    parser.add_argument(
+    parser.add_argument( # MIGHT ONLY KEEP THIS FOR DEVELOPMENT
         "--archive",
         help="supply archive file to skip importing step"
     )
@@ -88,6 +88,11 @@ def get_args(config):
         "--database_seq",
         default=config["PATHS"]["database_seq"],
         help="refrence database seq file in QIIME format for vsearch and naive bayes taxonomy assignment steps"
+    )
+
+    parser.add_argument( # YOU CAN GET RID OF THIS LATER
+        "--asv_seqs",
+        help="for development: skip up to taxonomy assignment if denoised seqs provided"
     )
 
     # parser.add_argument("-bdt", "--blast_database_tax", help="BLAST database taxa file in QIIME format for BLAST taxonomy assignment")
@@ -248,6 +253,39 @@ def denoise_reads(logger, reads, params, outdir):
 
     return asv_seqs, feat_table
 
+def run_vsearch(logger, asv_seqs, ref_tax, ref_seq, threads, outdir):
+    """Get exact matches with vsearch"""
+    out_tax = outdir / "vsearch_tax.qza"
+    top_hits = outdir / "vsearch_top_hits.qza"
+
+    logger.info("running vsearch")
+
+    try:
+        subprocess.run(
+            [
+                "qiime", "feature-classifier", "classify-consensus-vsearch",
+                "--i-query", asv_seqs,
+                "--i-reference-reads", ref_seq,
+                "--i-reference-taxonomy", ref_tax,
+                "--p-perc-identity", "1.0",
+                "--p-min-consensus", "0.94",
+                "--p-threads", threads,
+                "--o-classification", out_taxa,
+                "--o-search-results", top_hits
+            ],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+
+    except subprocess.CalledProcessError as e:
+        logger.error("vsearch failed")
+        logger.error(e.stderr)
+        sys.exit(1)
+    logger.info("DONE running vsearch")
+
+    return out_taxa
+
 def main():
     config = load_config("config.ini")
     args = get_args(config)
@@ -270,21 +308,32 @@ def main():
         reads_archive = Path(args.archive).resolve() # get archive path
     logger.info(f"loaded archive: {reads_archive}")
 
-    primers = args.forward_primer, args.reverse_primer
-    trim_dir = outdir / "trimmed_reads" # store trimmed read file here
-    trim_dir.mkdir()
-    trimmed_reads = trim_reads(logger, primers, reads_archive, threads, trim_dir)
+    if not args.asv_seqs:
+        primers = args.forward_primer, args.reverse_primer
+        trim_dir = outdir / "trimmed_reads" # store trimmed read file here
+        trim_dir.mkdir()
+        trimmed_reads = trim_reads(logger, primers, reads_archive, threads, trim_dir)
 
-    dada_params = { # dada2 parameters from command line arguments
-        "trim_forward": args.trim_forward,
-        "trim_reverse": args.trim_reverse,
-        "trunc_forward": args.trunc_forward,
-        "trunc_reverse": args.trunc_reverse,
-        "threads": threads
-    }
-    dada_dir = outdir / "dada2" # store deniosing files here
-    dada_dir.mkdir()
-    asv_seqs, feat_table = denoise_reads(logger, trimmed_reads, dada_params, dada_dir)
+        dada_params = { # dada2 parameters from command line arguments
+            "trim_forward": args.trim_forward,
+            "trim_reverse": args.trim_reverse,
+            "trunc_forward": args.trunc_forward,
+            "trunc_reverse": args.trunc_reverse,
+            "threads": threads
+        }
+        dada_dir = outdir / "dada2" # store deniosing files here
+        dada_dir.mkdir()
+        asv_seqs, feat_table = denoise_reads(logger, trimmed_reads, dada_params, dada_dir)
+    else:
+        logger.info("skipping denoising and using provided seqs instead")
+        asv_seqs = args.asv_seqs
+
+    crabs_ref_tax = args.database_tax
+    crabs_ref_seq = args.database_seq
+    logger.info("loaded crabs reference db files")
+    vsearch_dir = outdir / "vsearch"
+    vsearch_dir.mkdir()
+    vsearch_out = run_vsearch(logger, asv_seqs, crabs_ref_tax, crabs_ref_seq, threads, vsearch_dir)
 
     logger.info("pipeline end")
 
