@@ -176,7 +176,6 @@ def trim_reads(logger, primers, reads_archive, threads, outdir):
                 "--p-error-rate", "0.25", 
                 "--p-cores", threads,
                 "--o-trimmed-sequences", reverse_trimmed_reads,
-                "--o-stats", outdir / "reverse_trim_stats.qza"
             ],
             capture_output=True,
             text=True,
@@ -203,7 +202,6 @@ def trim_reads(logger, primers, reads_archive, threads, outdir):
                 "--p-discard-untrimmed", "TRUE",
                 "--p-match-adapter-wildcards", "TRUE",
                 "--o-trimmed-sequences", trimmed_reads,
-                "--o-stats", outdir / "trim_stats.qza"
             ],
             capture_output=True,
             text=True,
@@ -223,7 +221,6 @@ def denoise_reads(logger, reads, params, outdir):
     asv_seqs = outdir / "asv_seqs.qza"
     feat_table = outdir / "feat_table"
     denoise_stats = outdir / "denoise_stats"
-    transition_stats = outdir / "transition_stats"
 
     logger.info("denoising reads")
 
@@ -240,7 +237,6 @@ def denoise_reads(logger, reads, params, outdir):
                 "--o-representative-sequences", asv_seqs,
                 "--o-table", feat_table,
                 "--o-denoising-stats", denoise_stats,
-                "--o-base-transition-stats", transition_stats
             ],
             capture_output=True,
             text=True,
@@ -307,7 +303,8 @@ def extract_qza(logger, archive, new_name, outdir):
             check=True
         )
     except subprocess.CalledProcessError as e:
-        logger.error(f"error: {e}")
+        logger.error(f"extracting {archive} failed")
+        logger.error(e.stderr)
         sys.exit(1)
 
     path_to_data = list(tmpdir.glob("*/data/*"))[0]
@@ -324,7 +321,8 @@ def extract_qza(logger, archive, new_name, outdir):
             check=True
         )
     except subprocess.CalledProcessError as e:
-        logger.error(f"error: {e}")
+        logger.error(f"moving {archive} failed")
+        logger.error(e.stderr)
         sys.exit(1)
     logger.info(f"extracted {archive} to {final_path}")
 
@@ -410,11 +408,67 @@ def filter_seqs(logger, asv_seqs, unassigned, outdir):
         )
     
     except subprocess.CalledProcessError as e:
-        logger.error(f"importing failed: {e}")
+        logger.error("importing failed")
+        logger.error(e.stderr)
         sys.exit(1)
     logger.info(f"DONE importing filtered {prefix} seqs")
 
     return asv_out, unassigned_fasta
+
+def run_nb_classifier(logger, input_asvs, train_tax, train_seq, threads, outdir):
+    """Train and run the naive Bayes classifier on sequences vsearch did not have exact matches for."""
+    rescript_classifier = outdir / "rescript_classifier"
+    rescript_evaluation = outdir / "rescript_evaluation"
+    rescript_observed_taxonomy = outdir / "rescript_observed_taxonomy"
+
+    logger.info("training nb classifier")
+    try:
+        subprocess.run(
+            [
+                "qiime", "rescript", "evaluate-fit-classifier",
+                "--i-sequences", train_seq,
+                "--i-taxonomy", train_tax,
+                "--p-n-jobs", threads,
+                "--o-classifier", rescript_classifier,
+                "--o-evaluation", rescript_evaluation,
+                "--o-observed-taxonomy", rescript_observed_taxonomy
+            ],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+
+    except subprocess.CalledProcessError as e:
+        logger.error("training failed")
+        logger.error(e.stderr)
+        sys.exit(1)
+    logger.info("DONE training nb classifier")
+
+    nb_model = outdir / "rescript_classifier.qza"
+    nb_classification = outdir / "nb_classification.qza"
+
+    logger.info("running nb classifier")
+    try:
+        subprocess.run(
+            [
+                "qiime", "feature-classifier", "classify-sklearn",
+                "--i-reads", input_asvs,
+                "--i-classifier", nb_model,
+                "--p-n-jobs", threads,
+                "--o-classification", nb_classification
+            ],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+    
+    except subprocess.CalledProcessError as e:
+        logger.error("classification failed")
+        logger.error(e.stderr)
+        sys.exit(1)
+    logger.info("DONE running nb classifier")
+
+    return nb_classification
 
 def main():
     config = load_config("config.ini")
@@ -469,11 +523,12 @@ def main():
 
     species_level = 7 # looking for exact matches. all the way to species level.
     vsearch_unassigned_tax, vsearch_retained_tax = parse_output(logger, vsearch_out, vsearch_dir, species_level)
-    vsearch_unassigned_seqs_archive, vsearch_unassigned_seqs_fasta = filter_seqs(logger, asv_seqs, vsearch_unassigned_tax, vsearch_dir)
+    vsearch_unassigned_seq_archive, vsearch_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, vsearch_unassigned_tax, vsearch_dir)
 
     bayes_dir = outdir / "bayes"
     bayes_dir.mkdir()
-    bayes_out = run_nb_classifier(unassigned_vsearch_seqs_archive, crabs_ref_tax, crabs_ref_seq, threads, bayes_dir)
+    bayes_out = run_nb_classifier(logger, vsearch_unassigned_seq_archive, crabs_ref_tax, crabs_ref_seq, threads, bayes_dir)
+    print(bayes_out)
 
     family_level = 5
 
