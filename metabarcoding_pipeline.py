@@ -7,6 +7,7 @@ import subprocess
 from Bio.Seq import Seq
 import sys
 import shutil
+import pandas as pd
 
 def load_config(config_file):
     """Load configuration file."""
@@ -325,10 +326,85 @@ def extract_qza(logger, archive, new_name, outdir):
     except subprocess.CalledProcessError as e:
         logger.error(f"error: {e}")
         sys.exit(1)
-    logger.info(f"DONE extracting {archive}")
+    logger.info(f"extracted {archive} to {final_path}")
 
     shutil.rmtree(tmpdir)
     return final_path
+
+def parse_output(logger, tax_file, outdir, level):
+    """Parse output from taxa classification and separate into retained and unassigned tsvs"""
+    prefix = tax_file.name.split("_")[0] # get the prefix of the input file to name the output
+
+    new_name = prefix + "_tax.tsv"
+    unzipped_tax = extract_qza(logger, tax_file, new_name, outdir) # extract taxonomy tsv from qiime archive
+
+    tax_df = pd.read_csv(unzipped_tax, sep="\t") # read in vsearch output taxonomy.tsv
+
+    logger.info(f"parsing {prefix} taxonomy")
+
+    unassigned = tax_df[
+        tax_df["Taxon"] # take the column with taxonomic classification
+        .str.split(";", expand=False) # split it into a list of taxonomic levels
+        .apply(lambda x: len(x) < level) # if any rows have len < level, they are not classified deep enough
+    ]
+    
+    unassigned_out = outdir / ("unassigned_" + prefix + "_taxa.tsv") # this goes into the map_seqs function to figure out which exact seqs were left unassigned so they can be sent to the next step
+    unassigned.to_csv(unassigned_out, sep="\t", index=False)
+
+    retained = tax_df.drop( # drop all rows shared with unassigned (retain only family-level classifications)
+        tax_df[
+            tax_df["Feature ID"]
+            .isin(unassigned["Feature ID"])
+        ]
+        .index
+    )
+    
+    retained_out = outdir / ("retained_" + prefix + "_taxa.tsv") # this is used to prep taxonomy file for phyloseq
+    retained.to_csv(retained_out, sep="\t", index=False)
+
+    logger.info(f"DONE parsing {prefix} taxonomy")
+
+    return unassigned_out, retained_out
+
+def map_seqs(asv_seqs, unassigned, taxa_out, outdir):
+    """Use unassigned ids to find unassigned sequences. Filter for unassigned sequences and re-import for next step."""
+    unzipped_asvs = extract_qza(asv_seqs, outdir)
+
+    print("mapping seqs...")
+
+    asv_map = {}
+
+    with open(unzipped_asvs) as f:
+        lines = f.readlines()
+        for i in range(0, len(lines), 2):
+            feat = lines[i][1:].strip()
+            seq = lines[i+1].strip()
+            asv_map[feat] = seq
+    
+    os.remove(unzipped_asvs)
+
+    features_index = list(pd.read_csv(unassigned, sep="\t")["Feature ID"])
+
+    outdir = os.path.join(outdir, taxa_out)
+    
+    unassigned_fasta = os.path.join(outdir, "unassigned_" + taxa_out + "_seqs.fasta") # non-archive version of below which i pass to phyloseq processing part to trim taxa that are still unassigned after bayesian classification
+    with open(unassigned_fasta, "w") as f:
+        for feat in features_index:
+            f.write(f">{feat}\n")
+            f.write(f"{asv_map[feat]}\n")
+
+    asv_out = os.path.join(outdir, "unassigned_" + taxa_out + "_seqs.qza") # unassigned seqs that go to the next classifier 
+
+    subprocess.run([
+        "qiime", "tools", "import",
+        "--input-path", unassigned_fasta,
+        "--output-path", asv_out,
+        "--type", "FeatureData[Sequence]"
+    ])
+
+    print(f"done\n")
+
+    return asv_out, unassigned_fasta
 
 def main():
     config = load_config("config.ini")
@@ -376,12 +452,18 @@ def main():
     crabs_ref_tax = args.database_tax
     crabs_ref_seq = args.database_seq
     logger.info("loaded crabs reference db files")
+
     vsearch_dir = outdir / "vsearch"
     vsearch_dir.mkdir()
     vsearch_out = run_vsearch(logger, asv_seqs, crabs_ref_tax, crabs_ref_seq, threads, vsearch_dir)
 
-    new_name = "vsearch_tax.tsv"
-    print(extract_qza(logger, vsearch_out, new_name, vsearch_dir))
+    tax_level_cutoff = 7 # looking for exact matches. all the way to species level.
+    unassigned_vserach, retained_vsearch = parse_output(logger, vsearch_out, vsearch_dir, tax_level_cutoff)
+    map_seqs
+
+    bayes_dir = outdir / "bayes"
+    bayes_dir.mkdir()
+    bayes_out = None
 
     logger.info("pipeline end")
 
