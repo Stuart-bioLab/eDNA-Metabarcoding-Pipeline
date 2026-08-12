@@ -348,7 +348,7 @@ def parse_output(logger, tax_file, outdir, level):
         .apply(lambda x: len(x) < level) # if any rows have len < level, they are not classified deep enough
     ]
     
-    unassigned_out = outdir / ("unassigned_" + prefix + "_taxa.tsv") # this goes into the map_seqs function to figure out which exact seqs were left unassigned so they can be sent to the next step
+    unassigned_out = outdir / (prefix + "_unassigned_taxa.tsv") # this goes into the map_seqs function to figure out which exact seqs were left unassigned so they can be sent to the next step
     unassigned.to_csv(unassigned_out, sep="\t", index=False)
 
     retained = tax_df.drop( # drop all rows shared with unassigned (retain only family-level classifications)
@@ -359,50 +359,60 @@ def parse_output(logger, tax_file, outdir, level):
         .index
     )
     
-    retained_out = outdir / ("retained_" + prefix + "_taxa.tsv") # this is used to prep taxonomy file for phyloseq
+    retained_out = outdir / (prefix + "_retained_taxa.tsv") # this is used to prep taxonomy file for phyloseq
     retained.to_csv(retained_out, sep="\t", index=False)
 
     logger.info(f"DONE parsing {prefix} taxonomy")
 
     return unassigned_out, retained_out
 
-def map_seqs(asv_seqs, unassigned, taxa_out, outdir):
+def filter_seqs(logger, asv_seqs, unassigned, outdir):
     """Use unassigned ids to find unassigned sequences. Filter for unassigned sequences and re-import for next step."""
-    unzipped_asvs = extract_qza(asv_seqs, outdir)
+    prefix = unassigned.name.split("_")[0]
 
-    print("mapping seqs...")
+    new_name = prefix + "_seq.fasta"
+    unzipped_seq = extract_qza(logger, asv_seqs, new_name, outdir)
+
+    logger.info(f"filtering {prefix} seqs...")
 
     asv_map = {}
-
-    with open(unzipped_asvs) as f:
+    with open(unzipped_seq) as f: # map asv sequences to their qiime feature id
         lines = f.readlines()
         for i in range(0, len(lines), 2):
             feat = lines[i][1:].strip()
             seq = lines[i+1].strip()
             asv_map[feat] = seq
-    
-    os.remove(unzipped_asvs)
 
-    features_index = list(pd.read_csv(unassigned, sep="\t")["Feature ID"])
-
-    outdir = os.path.join(outdir, taxa_out)
+    features_index = list(pd.read_csv(unassigned, sep="\t")["Feature ID"]) # get all ids that were unassigned
     
-    unassigned_fasta = os.path.join(outdir, "unassigned_" + taxa_out + "_seqs.fasta") # non-archive version of below which i pass to phyloseq processing part to trim taxa that are still unassigned after bayesian classification
-    with open(unassigned_fasta, "w") as f:
+    unassigned_fasta = outdir / (prefix + "_unassigned_seqs.fasta") # non-archive version of below which i pass to phyloseq processing part to trim taxa that are still unassigned after bayesian classification
+    with open(unassigned_fasta, "w") as f: # write out file with only the sequences corresponding to unassigned features
         for feat in features_index:
             f.write(f">{feat}\n")
             f.write(f"{asv_map[feat]}\n")
 
-    asv_out = os.path.join(outdir, "unassigned_" + taxa_out + "_seqs.qza") # unassigned seqs that go to the next classifier 
+    logger.info(f"DONE filtering {prefix} sequences")
+    logger.info(f"importing filtered {prefix} seqs")
 
-    subprocess.run([
-        "qiime", "tools", "import",
-        "--input-path", unassigned_fasta,
-        "--output-path", asv_out,
-        "--type", "FeatureData[Sequence]"
-    ])
+    asv_out =  outdir / (prefix + "_unassigned_seqs.qza") # unassigned seqs that go to the next classifier 
 
-    print(f"done\n")
+    try:
+        subprocess.run( # import filtered sequences
+            [
+                "qiime", "tools", "import",
+                "--input-path", unassigned_fasta,
+                "--output-path", asv_out,
+                "--type", "FeatureData[Sequence]"
+            ],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+    
+    except subprocess.CalledProcessError as e:
+        logger.error(f"importing failed: {e}")
+        sys.exit(1)
+    logger.info(f"DONE importing filtered {prefix} seqs")
 
     return asv_out, unassigned_fasta
 
@@ -457,13 +467,15 @@ def main():
     vsearch_dir.mkdir()
     vsearch_out = run_vsearch(logger, asv_seqs, crabs_ref_tax, crabs_ref_seq, threads, vsearch_dir)
 
-    tax_level_cutoff = 7 # looking for exact matches. all the way to species level.
-    unassigned_vserach, retained_vsearch = parse_output(logger, vsearch_out, vsearch_dir, tax_level_cutoff)
-    map_seqs
+    species_level = 7 # looking for exact matches. all the way to species level.
+    vsearch_unassigned_tax, vsearch_retained_tax = parse_output(logger, vsearch_out, vsearch_dir, species_level)
+    vsearch_unassigned_seqs_archive, vsearch_unassigned_seqs_fasta = filter_seqs(logger, asv_seqs, vsearch_unassigned_tax, vsearch_dir)
 
     bayes_dir = outdir / "bayes"
     bayes_dir.mkdir()
-    bayes_out = None
+    bayes_out = run_nb_classifier(unassigned_vsearch_seqs_archive, crabs_ref_tax, crabs_ref_seq, threads, bayes_dir)
+
+    family_level = 5
 
     logger.info("pipeline end")
 
