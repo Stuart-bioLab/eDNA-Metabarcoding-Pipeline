@@ -6,6 +6,7 @@ import logging
 import subprocess
 from Bio.Seq import Seq
 import sys
+import shutil
 
 def load_config(config_file):
     """Load configuration file."""
@@ -286,6 +287,49 @@ def run_vsearch(logger, asv_seqs, ref_tax, ref_seq, threads, outdir):
 
     return out_tax
 
+def extract_qza(logger, archive, new_name, outdir):
+    """Unzip qiime archive. Allows for further data manipulation. Much faster than the export command."""
+    tmpdir = outdir / "tmp"
+    tmpdir.mkdir()
+
+    logger.info(f"extracting {archive}")
+    try:
+        subprocess.run(
+            [
+                "unzip",
+                "-qd",
+                tmpdir,
+                archive
+            ],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+    except subprocess.CalledProcessError as e:
+        logger.error(f"error: {e}")
+        sys.exit(1)
+
+    path_to_data = list(tmpdir.glob("*/data/*"))[0]
+    final_path = outdir / new_name
+    try:
+        subprocess.run(
+            [
+                "mv",
+                path_to_data,
+                final_path
+            ],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+    except subprocess.CalledProcessError as e:
+        logger.error(f"error: {e}")
+        sys.exit(1)
+    logger.info(f"DONE extracting {archive}")
+
+    shutil.rmtree(tmpdir)
+    return final_path
+
 def main():
     config = load_config("config.ini")
     args = get_args(config)
@@ -335,6 +379,9 @@ def main():
     vsearch_dir = outdir / "vsearch"
     vsearch_dir.mkdir()
     vsearch_out = run_vsearch(logger, asv_seqs, crabs_ref_tax, crabs_ref_seq, threads, vsearch_dir)
+
+    new_name = "vsearch_tax.tsv"
+    print(extract_qza(logger, vsearch_out, new_name, vsearch_dir))
 
     logger.info("pipeline end")
 
