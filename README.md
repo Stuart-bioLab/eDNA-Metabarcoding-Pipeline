@@ -8,4 +8,7 @@ Data are in disparate folders, not organized by study. The pipeline needs a mani
 The script `make_manifest_metadata.py` takes the metadata, study type, and read data directory as input. It subsets the metadata for samples from the target study. It then searches the input directory and pulls out paths to files that are labelled with the sample ids from the target study. The script then creates a manifest for the pipeline. It then uses the manifest ids to index the metadata, pairing replicates with samples and generating new metadata for just the target samples. The new metadata and manifest files are required as input for the pipeline.  
 `make_manifest_metadata.py` handles duplicate values in the metadata as well as labelled duplicate read files. *This data handling is specific to this project and this metadata.*  
 
-This may be implemented into the pipeline so that only one script needs to be run, but we'll cross that bridge when we get there.
+This may be implemented into the pipeline so that only one script needs to be run, but we'll cross that bridge when we get there.  
+  
+# yaml file
+i had to downgrade to qiime version 2025.4.0 (what the initial pipeline was built on) as some funcitonality was removed from rescript
