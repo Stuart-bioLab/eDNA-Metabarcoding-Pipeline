@@ -41,6 +41,7 @@ def get_args(config):
 
     parser.add_argument( # MIGHT ONLY KEEP THIS FOR DEVELOPMENT
         "--archive",
+        default=None,
         help="supply archive file to skip importing step"
     )
 
@@ -95,6 +96,11 @@ def get_args(config):
     parser.add_argument( # YOU CAN GET RID OF THIS LATER
         "--asv_seqs",
         help="for development: skip up to taxonomy assignment if denoised seqs provided"
+    )
+
+    parser.add_argument( # ALSO JUST FOR DEV PURPOSES. REMOVE BEFORE DEPLOYMENT.
+        "--bayes_tax",
+        help="taxonomy file from naive bayes classifier. tells the pipeline to skip to blast step."
     )
 
     # parser.add_argument("-bdt", "--blast_database_tax", help="BLAST database taxa file in QIIME format for BLAST taxonomy assignment")
@@ -252,7 +258,7 @@ def denoise_reads(logger, reads, params, outdir):
     return asv_seqs, feat_table
 
 def run_vsearch(logger, asv_seqs, ref_tax, ref_seq, threads, outdir):
-    """Get exact matches with vsearch"""
+    """Get exact matches with VSEASRCH"""
     out_tax = outdir / "vsearch_tax.qza"
     top_hits = outdir / "vsearch_top_hits.qza"
 
@@ -371,7 +377,7 @@ def filter_seqs(logger, asv_seqs, unassigned, outdir):
     new_name = prefix + "_seq.fasta"
     unzipped_seq = extract_qza(logger, asv_seqs, new_name, outdir)
 
-    logger.info(f"filtering {prefix} seqs...")
+    logger.info(f"filtering {prefix} seqs")
 
     asv_map = {}
     with open(unzipped_seq) as f: # map asv sequences to their qiime feature id
@@ -470,6 +476,10 @@ def run_nb_classifier(logger, input_asvs, train_tax, train_seq, threads, outdir)
 
     return nb_classification
 
+def run_blast(logger):
+    """Run BLAST on any seqs unclassified after VSEARCH and Naive Bayes"""
+    logger.info("running blast")
+
 def main():
     config = load_config("config.ini")
     args = get_args(config)
@@ -521,16 +531,21 @@ def main():
     vsearch_dir.mkdir()
     vsearch_out = run_vsearch(logger, asv_seqs, crabs_ref_tax, crabs_ref_seq, threads, vsearch_dir)
 
-    species_level = 7 # looking for exact matches. all the way to species level.
+    species_level = 7 # looking for exact matches all the way to species level
     vsearch_unassigned_tax, vsearch_retained_tax = parse_output(logger, vsearch_out, vsearch_dir, species_level)
     vsearch_unassigned_seq_archive, vsearch_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, vsearch_unassigned_tax, vsearch_dir)
 
     bayes_dir = outdir / "bayes"
     bayes_dir.mkdir()
     bayes_out = run_nb_classifier(logger, vsearch_unassigned_seq_archive, crabs_ref_tax, crabs_ref_seq, threads, bayes_dir)
-    print(bayes_out)
 
-    family_level = 5
+    family_level = 5 # looking only above family level
+    bayes_unassigned_tax, bayes_retained_tax = parse_output(logger, bayes_out, bayes_dir, family_level)
+    bayes_unassigned_seq_archive, bayes_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, bayes_unassigned_tax, bayes_dir)
+
+    blast_dir = outdir / "blast"
+    blast_dir.mkdir()
+    run_blast()
 
     logger.info("pipeline end")
 
