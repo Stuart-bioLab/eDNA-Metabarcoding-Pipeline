@@ -82,14 +82,14 @@ def get_args(config):
     )
     
     parser.add_argument(
-        "--database_tax",
-        default=config["PATHS"]["database_tax"],
+        "--crabs_database_tax",
+        default=config["PATHS"]["crabs_database_tax"],
         help="refrence database taxa file in QIIME format for vsearch and naive bayes taxonomy assignment steps"
     )
     
     parser.add_argument(
-        "--database_seq",
-        default=config["PATHS"]["database_seq"],
+        "--crabs_database_seq",
+        default=config["PATHS"]["crabs_database_seq"],
         help="refrence database seq file in QIIME format for vsearch and naive bayes taxonomy assignment steps"
     )
 
@@ -103,8 +103,17 @@ def get_args(config):
         help="taxonomy file from naive bayes classifier. tells the pipeline to skip to blast step."
     )
 
-    # parser.add_argument("-bdt", "--blast_database_tax", help="BLAST database taxa file in QIIME format for BLAST taxonomy assignment")
-    # parser.add_argument("-bds", "--blast_database_seq", help="BLAST database deq file in QIIME format for BLAST taxonomy assignment")
+    parser.add_argument(
+        "--blast_database_tax",
+        default=config["PATHS"]["blast_database_tax"],
+        help="refrence database tax file in QIIME format for BLAST"
+    )
+
+    parser.add_argument(
+        "--blast_database_seq",
+        default=config["PATHS"]["blast_database_seq"],
+        help="refrence database seq file in QIIME format for BLAST"
+    )
 
     return parser.parse_args()
 
