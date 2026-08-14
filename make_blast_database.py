@@ -1,4 +1,5 @@
 # Retrieve all 12S vertebrate sequences from NCBI, create database files for the qiime pipeline
+# TODO: add import to qiime; add logger instead of print statements; add clargs
 
 from Bio import Entrez, SeqIO
 import Bio
