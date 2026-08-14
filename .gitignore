@@ -5,4 +5,4 @@ results/
 *.tsv
 *.qza
 *.xlsx
-*.py
+UR_Chicago_db_pipeline_v7.py
