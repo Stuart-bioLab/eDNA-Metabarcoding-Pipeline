@@ -84,16 +84,16 @@ def match_ids(final_df, meta_df, rep_id):
         if meta_sample_id.endswith("D"): # if the sample id is a duplicate
             meta_sample_id = meta_sample_id[:-1] # index for the non-duplicate id
         else:
-            final_df[rep_id] = ["missing"]*len(meta_df) # if its simply not in the metadata, note that
+            matched_line = ["missing"]*len(meta_df) # if its simply not in the metadata, note that
             return final_df # and return
     
     duplicate = len(meta_df[meta_sample_id].shape) > 1 # if there is more than one column, its a duplicate
     if duplicate:
-        final_df[rep_id] = meta_df[meta_sample_id].iloc[:, 0] # grab first col only
+        matched_line = meta_df[meta_sample_id].iloc[:, 0] # grab first col only
     else: # if there are no problems
-        final_df[rep_id] = meta_df[meta_sample_id] # just port data over
+        matched_line = meta_df[meta_sample_id] # just port data over
 
-    return final_df
+    return matched_line
 
 def generate_metadata(manif_ids, meta_df, study):
     """add sample metadata to replicates"""
@@ -101,12 +101,13 @@ def generate_metadata(manif_ids, meta_df, study):
     final_merged_df = pd.DataFrame() # initialize df to output
     final_merged_df.index = t_meta_df.index
 
+    final_cols = {}
     for rep_id in manif_ids:
-        final_merged_df = match_ids(final_merged_df, t_meta_df, rep_id)
+        final_cols[rep_id] = match_ids(final_merged_df, t_meta_df, rep_id)
 
-    final_merged_df_out = final_merged_df.T
-    final_merged_df_out.index = final_merged_df_out.index.rename("Replicate ID")
-    final_merged_df_out.to_csv(f"{study}_metadata.tsv", sep="\t") # un-transpose and write out
+    final_df = pd.DataFrame(final_cols).T
+    final_df.index = final_df.index.rename("Replicate ID")
+    final_df.to_csv(f"{study}_metadata.tsv", sep="\t") # un-transpose and write out
 
     return
 
