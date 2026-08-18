@@ -537,6 +537,26 @@ def main():
     threads = args.threads
     logger.info(f"starting pipeline with {threads} threads")
 
+    crabs_ref_tax = Path(args.crabs_database_tax).resolve()
+    crabs_ref_seq = Path(args.crabs_database_seq).resolve()
+    if not crabs_ref_tax.is_file():
+        logger.error(f"database file {crabs_ref_tax} not found")
+        sys.exit(1)
+    if not crabs_ref_seq.is_file():
+        logger.error(f"database file {crabs_ref_seq} not found")
+        sys.exit(1)
+    logger.info("loaded crabs reference db files")
+
+    blast_ref_tax = Path(args.blast_database_tax).resolve()
+    blast_ref_seq = Path(args.blast_database_seq).resolve()
+    if not blast_ref_tax.is_file():
+        logger.error(f"database file {blast_ref_tax} not found")
+        sys.exit(1)
+    if not blast_ref_seq.is_file():
+        logger.error(f"database file {blast_ref_seq} not found")
+        sys.exit(1)
+    logger.info("loaded blast reference db files")
+
     metadata = Path(args.metadata).resolve()
     logger.info(f"loaded metadata: {metadata}")
 
@@ -571,10 +591,6 @@ def main():
         asv_seqs = Path(args.asv_seqs).resolve()
         logger.info(f"loaded seqs: {asv_seqs}")
 
-    crabs_ref_tax = args.crabs_database_tax
-    crabs_ref_seq = args.crabs_database_seq
-    logger.info("loaded crabs reference db files")
-
     if not args.bayes_tax:
         vsearch_dir = outdir / "vsearch"
         vsearch_dir.mkdir()
@@ -595,10 +611,6 @@ def main():
         logger.info("skipping straight to blast assignment")
         bayes_unassigned_seq_archive = Path(args.bayes_tax).resolve()
         logger.info(f"loaded bayes seqs: {bayes_unassigned_seq_archive}")
-
-    blast_ref_tax = args.blast_database_tax
-    blast_ref_seq = args.blast_database_seq
-    logger.info("loaded blast reference db files")
 
     blast_params = { # blast parameters from command line arguments
         "perc_identity": args.perc_identity,
