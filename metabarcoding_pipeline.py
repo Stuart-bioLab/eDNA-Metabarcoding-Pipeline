@@ -23,14 +23,8 @@ def get_args(config):
 
     parser.add_argument(
         "--manifest",
-        default=config["PATHS"]["manifest"],
+        default=None,
         help="manifest file mapping sample ids to read paths"
-    )
-
-    parser.add_argument(
-        "--metadata",
-        default=config["PATHS"]["metadata"],
-        help="metadata for samples"
     )
 
     parser.add_argument(
@@ -83,13 +77,13 @@ def get_args(config):
     
     parser.add_argument(
         "--crabs_database_tax",
-        default=config["PATHS"]["crabs_database_tax"],
+        default=config["DATABASES"]["crabs_database_tax"],
         help="refrence database taxa file in QIIME format for vsearch and naive bayes taxonomy assignment steps"
     )
     
     parser.add_argument(
         "--crabs_database_seq",
-        default=config["PATHS"]["crabs_database_seq"],
+        default=config["DATABASES"]["crabs_database_seq"],
         help="refrence database seq file in QIIME format for vsearch and naive bayes taxonomy assignment steps"
     )
 
@@ -105,13 +99,13 @@ def get_args(config):
 
     parser.add_argument(
         "--blast_database_tax",
-        default=config["PATHS"]["blast_database_tax"],
+        default=config["DATABASES"]["blast_database_tax"],
         help="refrence database tax file in QIIME format for BLAST"
     )
 
     parser.add_argument(
         "--blast_database_seq",
-        default=config["PATHS"]["blast_database_seq"],
+        default=config["DATABASES"]["blast_database_seq"],
         help="refrence database seq file in QIIME format for BLAST"
     )
 
