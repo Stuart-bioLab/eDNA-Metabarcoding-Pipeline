@@ -562,7 +562,14 @@ def main():
 
     if not args.archive: # only import reads if archive not supplied (this takes a while)
         reads_archive = Path(outdir / "reads.qza").resolve()
+        if not args.manifest:
+            print("please supply manifest file using the --manifest option")
+            logger.error("no manifest file supplied")
+            sys.exit(1)
         manifest = Path(args.manifest).resolve() # only load manifest if there's no archive supplied
+        if not manifest.is_file():
+            logger.error(f"cannot access manifest {manifest}. file does not exist.")
+            sys.exit(1)
         logger.info(f"loaded manifest: {manifest}")
         import_reads(logger, manifest, reads_archive)
     else:
