@@ -115,6 +115,24 @@ def get_args(config):
         help="refrence database seq file in QIIME format for BLAST"
     )
 
+    parser.add_argument(
+        "--perc_identity",
+        default=config["PARAMETERS"]["perc_identity"],
+        help="minimum percent identity accepted for blast hits"
+    )
+
+    parser.add_argument(
+        "--query_cov",
+        default=config["PARAMETERS"]["query_cov"],
+        help="minimum alignment coverage accepted for blast hits"
+    )
+
+    parser.add_argument(
+        "--max_accepts",
+        default=config["PARAMETERS"]["max_accepts"],
+        help="maximum number of hits to keep for blast query"
+    )
+
     return parser.parse_args()
 
 def create_outdir(base):
@@ -430,7 +448,7 @@ def filter_seqs(logger, asv_seqs, unassigned, outdir):
 
     return asv_out, unassigned_fasta
 
-def run_nb_classifier(logger, input_asvs, train_tax, train_seq, threads, outdir):
+def run_nb_classifier(logger, asv_seqs, train_tax, train_seq, threads, outdir):
     """Train and run the naive Bayes classifier on sequences vsearch did not have exact matches for."""
     rescript_classifier = outdir / "rescript_classifier"
     rescript_evaluation = outdir / "rescript_evaluation"
@@ -467,7 +485,7 @@ def run_nb_classifier(logger, input_asvs, train_tax, train_seq, threads, outdir)
         subprocess.run(
             [
                 "qiime", "feature-classifier", "classify-sklearn",
-                "--i-reads", input_asvs,
+                "--i-reads", asv_seqs,
                 "--i-classifier", nb_model,
                 "--p-n-jobs", threads,
                 "--o-classification", nb_classification
@@ -485,9 +503,36 @@ def run_nb_classifier(logger, input_asvs, train_tax, train_seq, threads, outdir)
 
     return nb_classification
 
-def run_blast(logger):
+def run_blast(logger, asv_seqs, ref_tax, ref_seq, params, outdir):
     """Run BLAST on any seqs unclassified after VSEARCH and Naive Bayes"""
+    out_tax = outdir / "blast_tax.qza"
+    top_hits = outdir / "blast_top_hits.qza"
+
     logger.info("running blast")
+    try:
+        subprocess.run(
+            [
+                "qiime", "feature-classifier", "classify-consensus-blast",
+                "--i-query", asv_seqs,
+                "--i-reference-reads", ref_seq,
+                "--i-reference-taxonomy", ref_tax,
+                "--p-perc-identity", params["perc_identity"],
+                "--p-query-cov", params["query_cov"],
+                "--p-maxaccepts", params["max_accepts"],
+                "--o-classification", out_tax,
+                "--o-search-results", top_hits
+            ],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+
+    except subprocess.CalledProcessError as e:
+        qiime_tmp_dir = e.stderr[-35:-1]
+        logger.error(f"blast failed. check {qiime_tmp_dir} for more info.")
+    logger.info("DONE running blast")
+
+    return out_tax
 
 def main():
     config = load_config("config.ini")
@@ -532,29 +577,45 @@ def main():
         asv_seqs = Path(args.asv_seqs).resolve()
         logger.info(f"loaded seqs: {asv_seqs}")
 
-    crabs_ref_tax = args.database_tax
-    crabs_ref_seq = args.database_seq
+    crabs_ref_tax = args.crabs_database_tax
+    crabs_ref_seq = args.crabs_database_seq
     logger.info("loaded crabs reference db files")
 
-    vsearch_dir = outdir / "vsearch"
-    vsearch_dir.mkdir()
-    vsearch_out = run_vsearch(logger, asv_seqs, crabs_ref_tax, crabs_ref_seq, threads, vsearch_dir)
+    if not args.bayes_tax:
+        vsearch_dir = outdir / "vsearch"
+        vsearch_dir.mkdir()
+        vsearch_out = run_vsearch(logger, asv_seqs, crabs_ref_tax, crabs_ref_seq, threads, vsearch_dir)
 
-    species_level = 7 # looking for exact matches all the way to species level
-    vsearch_unassigned_tax, vsearch_retained_tax = parse_output(logger, vsearch_out, vsearch_dir, species_level)
-    vsearch_unassigned_seq_archive, vsearch_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, vsearch_unassigned_tax, vsearch_dir)
+        species_level = 7 # looking for exact matches all the way to species level
+        vsearch_unassigned_tax, vsearch_retained_tax = parse_output(logger, vsearch_out, vsearch_dir, species_level)
+        vsearch_unassigned_seq_archive, vsearch_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, vsearch_unassigned_tax, vsearch_dir)
 
-    bayes_dir = outdir / "bayes"
-    bayes_dir.mkdir()
-    bayes_out = run_nb_classifier(logger, vsearch_unassigned_seq_archive, crabs_ref_tax, crabs_ref_seq, threads, bayes_dir)
+        bayes_dir = outdir / "bayes"
+        bayes_dir.mkdir()
+        bayes_out = run_nb_classifier(logger, vsearch_unassigned_seq_archive, crabs_ref_tax, crabs_ref_seq, threads, bayes_dir)
 
-    family_level = 5 # looking only above family level
-    bayes_unassigned_tax, bayes_retained_tax = parse_output(logger, bayes_out, bayes_dir, family_level)
-    bayes_unassigned_seq_archive, bayes_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, bayes_unassigned_tax, bayes_dir)
+        family_level = 5 # looking only above family level
+        bayes_unassigned_tax, bayes_retained_tax = parse_output(logger, bayes_out, bayes_dir, family_level)
+        bayes_unassigned_seq_archive, bayes_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, bayes_unassigned_tax, bayes_dir)
+    else:
+        logger.info("skipping straight to blast assignment")
+        bayes_unassigned_seq_archive = Path(args.bayes_tax).resolve()
+        logger.info(f"loaded bayes seqs: {bayes_unassigned_seq_archive}")
+
+    blast_ref_tax = args.blast_database_tax
+    blast_ref_seq = args.blast_database_seq
+    logger.info("loaded blast reference db files")
+
+    blast_params = { # blast parameters from command line arguments
+        "perc_identity": args.perc_identity,
+        "query_cov": args.query_cov,
+        "max_accepts": args.max_accepts,
+        "threads": threads
+    }
 
     blast_dir = outdir / "blast"
     blast_dir.mkdir()
-    run_blast()
+    blast_out = run_blast(logger, bayes_unassigned_seq_archive, blast_ref_tax, blast_ref_seq, blast_params, blast_dir)
 
     logger.info("pipeline end")
 
