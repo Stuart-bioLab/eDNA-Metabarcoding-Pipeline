@@ -117,6 +117,11 @@ def get_args(config):
         help="maximum number of hits to keep for blast query"
     )
 
+    parser.add_argument( # FOR DEV PURPOSES
+        "--skip_to_mapping",
+        action="store_true"
+    )
+
     return parser.parse_args()
 
 def create_outdir(base):
@@ -544,94 +549,106 @@ def main():
     threads = args.threads
     logger.info(f"starting pipeline with {threads} threads")
 
-    crabs_ref_tax = Path(args.crabs_database_tax).resolve()
-    crabs_ref_seq = Path(args.crabs_database_seq).resolve()
-    if not crabs_ref_tax.is_file():
-        logger.error(f"database file {crabs_ref_tax} not found")
-        sys.exit(1)
-    if not crabs_ref_seq.is_file():
-        logger.error(f"database file {crabs_ref_seq} not found")
-        sys.exit(1)
-    logger.info("loaded crabs reference db files")
-
-    blast_ref_tax = Path(args.blast_database_tax).resolve()
-    blast_ref_seq = Path(args.blast_database_seq).resolve()
-    if not blast_ref_tax.is_file():
-        logger.error(f"database file {blast_ref_tax} not found")
-        sys.exit(1)
-    if not blast_ref_seq.is_file():
-        logger.error(f"database file {blast_ref_seq} not found")
-        sys.exit(1)
-    logger.info("loaded blast reference db files")
-
-    if not args.archive: # only import reads if archive not supplied (this takes a while)
-        reads_archive = Path(outdir / "reads.qza").resolve()
-        if not args.manifest:
-            print("please supply manifest file using the --manifest option")
-            logger.error("no manifest file supplied")
+    if not args.skip_to_mapping:
+        crabs_ref_tax = Path(args.crabs_database_tax).resolve()
+        crabs_ref_seq = Path(args.crabs_database_seq).resolve()
+        if not crabs_ref_tax.is_file():
+            logger.error(f"database file {crabs_ref_tax} not found")
             sys.exit(1)
-        manifest = Path(args.manifest).resolve() # only load manifest if there's no archive supplied
-        if not manifest.is_file():
-            logger.error(f"cannot access manifest {manifest}. file does not exist.")
+        if not crabs_ref_seq.is_file():
+            logger.error(f"database file {crabs_ref_seq} not found")
             sys.exit(1)
-        logger.info(f"loaded manifest: {manifest}")
-        import_reads(logger, manifest, reads_archive)
+        logger.info("loaded crabs reference db files")
+
+        blast_ref_tax = Path(args.blast_database_tax).resolve()
+        blast_ref_seq = Path(args.blast_database_seq).resolve()
+        if not blast_ref_tax.is_file():
+            logger.error(f"database file {blast_ref_tax} not found")
+            sys.exit(1)
+        if not blast_ref_seq.is_file():
+            logger.error(f"database file {blast_ref_seq} not found")
+            sys.exit(1)
+        logger.info("loaded blast reference db files")
+
+        if not args.archive: # only import reads if archive not supplied (this takes a while)
+            reads_archive = Path(outdir / "reads.qza").resolve()
+            if not args.manifest:
+                print("please supply manifest file using the --manifest option")
+                logger.error("no manifest file supplied")
+                sys.exit(1)
+            manifest = Path(args.manifest).resolve() # only load manifest if there's no archive supplied
+            if not manifest.is_file():
+                logger.error(f"cannot access manifest {manifest}. file does not exist.")
+                sys.exit(1)
+            logger.info(f"loaded manifest: {manifest}")
+            import_reads(logger, manifest, reads_archive)
+        else:
+            logger.info("skipping import and using archive file instead")
+            reads_archive = Path(args.archive).resolve() # get archive path
+        logger.info(f"loaded archive: {reads_archive}")
+
+        primers = args.forward_primer, args.reverse_primer
+        trim_dir = outdir / "trimmed_reads" # store trimmed read file here
+        trim_dir.mkdir()
+        trimmed_reads = trim_reads(logger, primers, reads_archive, threads, trim_dir)
+
+        dada_params = { # dada2 parameters from command line arguments
+            "trim_forward": args.trim_forward,
+            "trim_reverse": args.trim_reverse,
+            "trunc_forward": args.trunc_forward,
+            "trunc_reverse": args.trunc_reverse,
+            "threads": threads
+        }
+        dada_dir = outdir / "dada2" # store deniosing files here
+        dada_dir.mkdir()
+        asv_seqs, feat_table = denoise_reads(logger, trimmed_reads, dada_params, dada_dir)
+
+        vsearch_dir = outdir / "vsearch"
+        vsearch_dir.mkdir()
+        vsearch_out = run_vsearch(logger, asv_seqs, crabs_ref_tax, crabs_ref_seq, threads, vsearch_dir)
+
+        species_level = 7 # looking for exact matches all the way to species level
+        vsearch_unassigned_tax, vsearch_retained_tax = parse_output(logger, vsearch_out, vsearch_dir, species_level)
+        vsearch_unassigned_seq_archive, vsearch_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, vsearch_unassigned_tax, vsearch_dir)
+
+        bayes_dir = outdir / "bayes"
+        bayes_dir.mkdir()
+        bayes_out = run_nb_classifier(logger, vsearch_unassigned_seq_archive, crabs_ref_tax, crabs_ref_seq, threads, bayes_dir)
+
+        family_level = 5 # looking only above family level
+        bayes_unassigned_tax, bayes_retained_tax = parse_output(logger, bayes_out, bayes_dir, family_level)
+        bayes_unassigned_seq_archive, bayes_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, bayes_unassigned_tax, bayes_dir)
+
+        blast_params = { # blast parameters from command line arguments
+            "perc_identity": args.perc_identity,
+            "query_cov": args.query_cov,
+            "max_accepts": args.max_accepts,
+            "threads": threads
+        }
+        blast_dir = outdir / "blast"
+        blast_dir.mkdir()
+        blast_out = run_blast(logger, bayes_unassigned_seq_archive, blast_ref_tax, blast_ref_seq, blast_params, blast_dir)
+
+        if blast_out.is_file(): # only run these if blast completes successfully
+            blast_unassigned_tax, blast_retained_tax = parse_output(logger, blast_out, blast_dir, family_level)
+            blast_unassigned_seq_archive, blast_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, blast_unassigned_tax, bayes_dir)
+        else:
+            blast_retained_taxa = None
+            blast_unassigned_seq_fasta = None
+
+        tax_files = [
+            vsearch_retained_tax,
+            bayes_retained_tax,
+            blast_retained_tax
+        ]
+    
     else:
-        logger.info("skipping import and using archive file instead")
-        reads_archive = Path(args.archive).resolve() # get archive path
-    logger.info(f"loaded archive: {reads_archive}")
+        logger.info("skipping straight to mapping step")
+        tax_files = [
+            "/home/bmogi/eDNA-Metabarcoding-Pipeline/post-tax-files/vsearch_retained_tax.tsv",
+            "/home/bmogi/eDNA-Metabarcoding-Pipeline/post-tax-files/nb_retained_tax.tsv"
+        ]
 
-    primers = args.forward_primer, args.reverse_primer
-    trim_dir = outdir / "trimmed_reads" # store trimmed read file here
-    trim_dir.mkdir()
-    trimmed_reads = trim_reads(logger, primers, reads_archive, threads, trim_dir)
-
-    dada_params = { # dada2 parameters from command line arguments
-        "trim_forward": args.trim_forward,
-        "trim_reverse": args.trim_reverse,
-        "trunc_forward": args.trunc_forward,
-        "trunc_reverse": args.trunc_reverse,
-        "threads": threads
-    }
-    dada_dir = outdir / "dada2" # store deniosing files here
-    dada_dir.mkdir()
-    asv_seqs, feat_table = denoise_reads(logger, trimmed_reads, dada_params, dada_dir)
-
-    vsearch_dir = outdir / "vsearch"
-    vsearch_dir.mkdir()
-    vsearch_out = run_vsearch(logger, asv_seqs, crabs_ref_tax, crabs_ref_seq, threads, vsearch_dir)
-
-    species_level = 7 # looking for exact matches all the way to species level
-    vsearch_unassigned_tax, vsearch_retained_tax = parse_output(logger, vsearch_out, vsearch_dir, species_level)
-    vsearch_unassigned_seq_archive, vsearch_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, vsearch_unassigned_tax, vsearch_dir)
-
-    bayes_dir = outdir / "bayes"
-    bayes_dir.mkdir()
-    bayes_out = run_nb_classifier(logger, vsearch_unassigned_seq_archive, crabs_ref_tax, crabs_ref_seq, threads, bayes_dir)
-
-    family_level = 5 # looking only above family level
-    bayes_unassigned_tax, bayes_retained_tax = parse_output(logger, bayes_out, bayes_dir, family_level)
-    bayes_unassigned_seq_archive, bayes_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, bayes_unassigned_tax, bayes_dir)
-
-    blast_params = { # blast parameters from command line arguments
-        "perc_identity": args.perc_identity,
-        "query_cov": args.query_cov,
-        "max_accepts": args.max_accepts,
-        "threads": threads
-    }
-
-    blast_dir = outdir / "blast"
-    blast_dir.mkdir()
-    blast_out = run_blast(logger, bayes_unassigned_seq_archive, blast_ref_tax, blast_ref_seq, blast_params, blast_dir)
-
-    if blast_out.is_file(): # only run these if blast completes successfully
-        blast_unassigned_tax, blast_retained_tax = parse_output(logger, blast_out, blast_dir, family_level)
-        blast_unassigned_seq_archive, blast_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, blast_unassigned_tax, bayes_dir)
-    else:
-        blast_retained_taxa = None
-        blast_unassigned_seq_fasta = None
-
-    tax_files = [vsearch_retained_tax, bayes_retained_tax, blast_retained_tax]
     final_tax_tsv = stitch_tax_files(logger, tax_files, outdir)
 
     logger.info("pipeline end")
