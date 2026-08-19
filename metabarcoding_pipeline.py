@@ -627,6 +627,10 @@ def main():
     blast_dir.mkdir()
     blast_out = run_blast(logger, bayes_unassigned_seq_archive, blast_ref_tax, blast_ref_seq, blast_params, blast_dir)
 
+    if blast_out.is_file():
+        blast_unassigned_tax, blast_retained_tax = parse_output(logger, blast_out, blast_dir, family_level)
+        blast_unassigned_seq_archive, blast_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, blast_unassigned_tax, bayes_dir)
+
     logger.info("pipeline end")
 
 if __name__ == "__main__":
