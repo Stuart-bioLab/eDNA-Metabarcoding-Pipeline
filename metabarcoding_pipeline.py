@@ -174,6 +174,7 @@ def import_reads(logger, manifest, archive):
     return
 
 def trim_reads(logger, primers, reads_archive, threads, outdir):
+    """Trim primers and reverse complemnt primers."""
     forward_primer, reverse_primer = primers
 
     rev_comp_forward = str(Seq(forward_primer).reverse_complement())
@@ -274,7 +275,7 @@ def denoise_reads(logger, reads, params, outdir):
     return asv_seqs, feat_table
 
 def run_vsearch(logger, asv_seqs, ref_tax, ref_seq, threads, outdir):
-    """Get exact matches with VSEASRCH"""
+    """Get exact matches with VSEASRCH."""
     out_tax = outdir / "vsearch_tax.qza"
     top_hits = outdir / "vsearch_top_hits.qza"
 
@@ -314,12 +315,7 @@ def extract_qza(logger, archive, new_name, outdir):
     logger.info(f"extracting {archive}")
     try:
         subprocess.run(
-            [
-                "unzip",
-                "-qd",
-                tmpdir,
-                archive
-            ],
+            ["unzip", "-qd", tmpdir, archive],
             capture_output=True,
             text=True,
             check=True
@@ -333,11 +329,7 @@ def extract_qza(logger, archive, new_name, outdir):
     final_path = outdir / new_name
     try:
         subprocess.run(
-            [
-                "mv",
-                path_to_data,
-                final_path
-            ],
+            ["mv", path_to_data, final_path],
             capture_output=True,
             text=True,
             check=True
@@ -352,7 +344,7 @@ def extract_qza(logger, archive, new_name, outdir):
     return final_path
 
 def parse_output(logger, tax_file, outdir, level):
-    """Parse output from taxa classification and separate into retained and unassigned tsvs"""
+    """Parse output from taxa classification and separate into retained and unassigned tsvs."""
     prefix = tax_file.name.split("_")[0] # get the prefix of the input file to name the output
 
     new_name = prefix + "_tax.tsv"
@@ -493,7 +485,7 @@ def run_nb_classifier(logger, asv_seqs, train_tax, train_seq, threads, outdir):
     return nb_classification
 
 def run_blast(logger, asv_seqs, ref_tax, ref_seq, params, outdir):
-    """Run BLAST on any seqs unclassified after VSEARCH and Naive Bayes"""
+    """Run BLAST on any seqs unclassified after VSEARCH and Naive Bayes."""
     out_tax = outdir / "blast_tax.qza"
     top_hits = outdir / "blast_top_hits.qza"
 
@@ -524,6 +516,7 @@ def run_blast(logger, asv_seqs, ref_tax, ref_seq, params, outdir):
     return out_tax
 
 def stitch_tax_files(logger, tax_files, outdir):
+    """Assemble all taxa retained across all three classification steps and combine them into one tsv."""
     logger.info("assembling final tax file")
 
     all_tax_dfs = [] # turn each tsv into a dataframe and store it here
@@ -539,6 +532,37 @@ def stitch_tax_files(logger, tax_files, outdir):
 
     logger.info(f"DONE assembling tax file")
     return final_tax_tsv
+
+def map_tax_to_feat_table(logger, feat_table, final_tax_tsv, outdir):
+    """Map taxonomy assignments to the DADA2 feature table."""
+    logger.info("mapping tax file to feature table")
+    new_name = "feat_table.biom" # qiime stores dada2 feature table as a biom file
+    feat_table_biom = extract_qza(logger, feat_table, new_name, outdir)
+    
+    feat_table_tsv = outdir / "feat_table.tsv"
+    try:
+        subprocess.run( # convert biom file to tsv for parsing
+            [
+                "biom", "convert",
+                "-i", feat_table_biom,
+                "-o", feat_table_tsv,
+                "--to-tsv"
+            ],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+    except subprocess.CalledProcessError as e:
+        logger.error(f"biom convert failed on {feat_table_biom}")
+        logger.error(e.stderr)
+        sys.exit(1)
+    logger.info(f"converted {feat_table_biom} to {feat_table_tsv}")
+
+    feat_tab_df = pd.read_csv(feat_table_tsv, sep="\t", skiprows=1) # skip the Commented row of the converted biom file
+    tax_tab_df = pd.read_csv(final_tax_tsv, sep="\t")
+
+    print(feat_tab_df.head())
+    print(tax_tab_df.head())
 
 def main():
     config = load_config("config.ini")
@@ -648,8 +672,12 @@ def main():
             "/home/bmogi/eDNA-Metabarcoding-Pipeline/post-tax-files/vsearch_retained_tax.tsv",
             "/home/bmogi/eDNA-Metabarcoding-Pipeline/post-tax-files/nb_retained_tax.tsv"
         ]
+        feat_table = "/home/bmogi/eDNA-Metabarcoding-Pipeline/post-tax-files/feat_table.qza"
 
-    final_tax_tsv = stitch_tax_files(logger, tax_files, outdir)
+    mapping_dir = outdir / "mapping_files"
+    mapping_dir.mkdir()
+    final_tax_tsv = stitch_tax_files(logger, tax_files, mapping_dir)
+    map_tax_to_feat_table(logger, feat_table, final_tax_tsv, mapping_dir)
 
     logger.info("pipeline end")
 
