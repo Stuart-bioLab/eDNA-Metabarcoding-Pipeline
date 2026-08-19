@@ -11,11 +11,11 @@ def parse_args():
     """parse arguments, making sure data is accessible and study name is correct"""
     parser = argparse.ArgumentParser()
     parser.add_argument("-m", "--metadata", required=True, help="metadata file mapping sample ids to study")
-    parser.add_argument("-s", "--study", required=True, help="possible study types: DamBaseline, JuneJulyTemporal, EbonyTemporal, Filter")
+    parser.add_argument("-s", "--study", required=True, help="possible study types: DamBaseline, JuneJulyTemporal, EbonyTemporal, Filter_5.0v0.45")
     parser.add_argument("-d", "--data", required=True, help="directory with read files to be searched recursively")
     args = parser.parse_args()
 
-    studies = ["DamBaseline", "JuneJulyTemporal", "EbonyTemporal", "Filter"]
+    studies = ["DamBaseline", "JuneJulyTemporal", "EbonyTemporal", "Filter_5.0v0.45"]
     if args.study not in studies:
         print("possible studies include:", end=" ")
         for study in studies:
