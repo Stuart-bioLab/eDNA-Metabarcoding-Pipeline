@@ -87,16 +87,6 @@ def get_args(config):
         help="refrence database seq file in QIIME format for vsearch and naive bayes taxonomy assignment steps"
     )
 
-    parser.add_argument( # YOU CAN GET RID OF THIS LATER
-        "--asv_seqs",
-        help="for development: skip up to taxonomy assignment if denoised seqs provided"
-    )
-
-    parser.add_argument( # ALSO JUST FOR DEV PURPOSES. REMOVE BEFORE DEPLOYMENT.
-        "--bayes_tax",
-        help="taxonomy file from naive bayes classifier. tells the pipeline to skip to blast step."
-    )
-
     parser.add_argument(
         "--blast_database_tax",
         default=config["DATABASES"]["blast_database_tax"],
@@ -574,47 +564,37 @@ def main():
         reads_archive = Path(args.archive).resolve() # get archive path
     logger.info(f"loaded archive: {reads_archive}")
 
-    if not args.asv_seqs:
-        primers = args.forward_primer, args.reverse_primer
-        trim_dir = outdir / "trimmed_reads" # store trimmed read file here
-        trim_dir.mkdir()
-        trimmed_reads = trim_reads(logger, primers, reads_archive, threads, trim_dir)
+    primers = args.forward_primer, args.reverse_primer
+    trim_dir = outdir / "trimmed_reads" # store trimmed read file here
+    trim_dir.mkdir()
+    trimmed_reads = trim_reads(logger, primers, reads_archive, threads, trim_dir)
 
-        dada_params = { # dada2 parameters from command line arguments
-            "trim_forward": args.trim_forward,
-            "trim_reverse": args.trim_reverse,
-            "trunc_forward": args.trunc_forward,
-            "trunc_reverse": args.trunc_reverse,
-            "threads": threads
-        }
-        dada_dir = outdir / "dada2" # store deniosing files here
-        dada_dir.mkdir()
-        asv_seqs, feat_table = denoise_reads(logger, trimmed_reads, dada_params, dada_dir)
-    else:
-        logger.info("skipping denoising and using provided seqs instead")
-        asv_seqs = Path(args.asv_seqs).resolve()
-        logger.info(f"loaded seqs: {asv_seqs}")
+    dada_params = { # dada2 parameters from command line arguments
+        "trim_forward": args.trim_forward,
+        "trim_reverse": args.trim_reverse,
+        "trunc_forward": args.trunc_forward,
+        "trunc_reverse": args.trunc_reverse,
+        "threads": threads
+    }
+    dada_dir = outdir / "dada2" # store deniosing files here
+    dada_dir.mkdir()
+    asv_seqs, feat_table = denoise_reads(logger, trimmed_reads, dada_params, dada_dir)
 
-    if not args.bayes_tax:
-        vsearch_dir = outdir / "vsearch"
-        vsearch_dir.mkdir()
-        vsearch_out = run_vsearch(logger, asv_seqs, crabs_ref_tax, crabs_ref_seq, threads, vsearch_dir)
+    vsearch_dir = outdir / "vsearch"
+    vsearch_dir.mkdir()
+    vsearch_out = run_vsearch(logger, asv_seqs, crabs_ref_tax, crabs_ref_seq, threads, vsearch_dir)
 
-        species_level = 7 # looking for exact matches all the way to species level
-        vsearch_unassigned_tax, vsearch_retained_tax = parse_output(logger, vsearch_out, vsearch_dir, species_level)
-        vsearch_unassigned_seq_archive, vsearch_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, vsearch_unassigned_tax, vsearch_dir)
+    species_level = 7 # looking for exact matches all the way to species level
+    vsearch_unassigned_tax, vsearch_retained_tax = parse_output(logger, vsearch_out, vsearch_dir, species_level)
+    vsearch_unassigned_seq_archive, vsearch_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, vsearch_unassigned_tax, vsearch_dir)
 
-        bayes_dir = outdir / "bayes"
-        bayes_dir.mkdir()
-        bayes_out = run_nb_classifier(logger, vsearch_unassigned_seq_archive, crabs_ref_tax, crabs_ref_seq, threads, bayes_dir)
+    bayes_dir = outdir / "bayes"
+    bayes_dir.mkdir()
+    bayes_out = run_nb_classifier(logger, vsearch_unassigned_seq_archive, crabs_ref_tax, crabs_ref_seq, threads, bayes_dir)
 
-        family_level = 5 # looking only above family level
-        bayes_unassigned_tax, bayes_retained_tax = parse_output(logger, bayes_out, bayes_dir, family_level)
-        bayes_unassigned_seq_archive, bayes_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, bayes_unassigned_tax, bayes_dir)
-    else:
-        logger.info("skipping straight to blast assignment")
-        bayes_unassigned_seq_archive = Path(args.bayes_tax).resolve()
-        logger.info(f"loaded bayes seqs: {bayes_unassigned_seq_archive}")
+    family_level = 5 # looking only above family level
+    bayes_unassigned_tax, bayes_retained_tax = parse_output(logger, bayes_out, bayes_dir, family_level)
+    bayes_unassigned_seq_archive, bayes_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, bayes_unassigned_tax, bayes_dir)
 
     blast_params = { # blast parameters from command line arguments
         "perc_identity": args.perc_identity,
@@ -630,6 +610,9 @@ def main():
     if blast_out.is_file():
         blast_unassigned_tax, blast_retained_tax = parse_output(logger, blast_out, blast_dir, family_level)
         blast_unassigned_seq_archive, blast_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, blast_unassigned_tax, bayes_dir)
+    else:
+        blast_retained_taxa = None
+        blast_unassigned_seq_fasta = None
 
     logger.info("pipeline end")
 
