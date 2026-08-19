@@ -518,6 +518,23 @@ def run_blast(logger, asv_seqs, ref_tax, ref_seq, params, outdir):
 
     return out_tax
 
+def stitch_tax_files(logger, tax_files, outdir):
+    logger.info("assembling final tax file")
+
+    all_tax_dfs = [] # turn each tsv into a dataframe and store it here
+    for file in tax_files:
+        if file == None:
+            logger.error("one file was None type, skipping file")
+        current_tax_df = pd.read_csv(file, sep="\t") # read in current taxonomy file as dataframe
+        all_tax_dfs.append(current_tax_df)
+    final_tax_df = pd.concat(all_tax_dfs).drop_duplicates() # stitch taxonomy files together and drop duplicates
+    
+    final_tax_tsv = outdir / "final_tax.tsv"
+    final_tax_df.to_csv(final_tax_tsv, sep="\t", index=False)
+
+    logger.info(f"DONE assembling tax file")
+    return final_tax_tsv
+
 def main():
     config = load_config("config.ini")
     args = get_args(config)
@@ -607,12 +624,15 @@ def main():
     blast_dir.mkdir()
     blast_out = run_blast(logger, bayes_unassigned_seq_archive, blast_ref_tax, blast_ref_seq, blast_params, blast_dir)
 
-    if blast_out.is_file():
+    if blast_out.is_file(): # only run these if blast completes successfully
         blast_unassigned_tax, blast_retained_tax = parse_output(logger, blast_out, blast_dir, family_level)
         blast_unassigned_seq_archive, blast_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, blast_unassigned_tax, bayes_dir)
     else:
         blast_retained_taxa = None
         blast_unassigned_seq_fasta = None
+
+    tax_files = [vsearch_retained_tax, bayes_retained_tax, blast_retained_tax]
+    final_tax_tsv = stitch_tax_files(logger, tax_files, outdir)
 
     logger.info("pipeline end")
 
