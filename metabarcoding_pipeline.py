@@ -363,7 +363,7 @@ def parse_output(logger, tax_file, outdir, level):
         .apply(lambda x: len(x) < level) # if any rows have len < level, they are not classified deep enough
     ]
     
-    unassigned_out = outdir / (prefix + "_unassigned_taxa.tsv") # this goes into the map_seqs function to figure out which exact seqs were left unassigned so they can be sent to the next step
+    unassigned_out = outdir / (prefix + "_unassigned_tax.tsv") # this goes into the map_seqs function to figure out which exact seqs were left unassigned so they can be sent to the next step
     unassigned.to_csv(unassigned_out, sep="\t", index=False)
 
     retained = tax_df.drop( # drop all rows shared with unassigned (retain only family-level classifications)
@@ -374,7 +374,7 @@ def parse_output(logger, tax_file, outdir, level):
         .index
     )
     
-    retained_out = outdir / (prefix + "_retained_taxa.tsv") # this is used to prep taxonomy file for phyloseq
+    retained_out = outdir / (prefix + "_retained_tax.tsv") # this is used to prep taxonomy file for phyloseq
     retained.to_csv(retained_out, sep="\t", index=False)
 
     logger.info(f"DONE parsing {prefix} taxonomy")
@@ -400,7 +400,7 @@ def filter_seqs(logger, asv_seqs, unassigned, outdir):
 
     features_index = list(pd.read_csv(unassigned, sep="\t")["Feature ID"]) # get all ids that were unassigned
     
-    unassigned_fasta = outdir / (prefix + "_unassigned_seqs.fasta") # non-archive version of below which i pass to phyloseq processing part to trim taxa that are still unassigned after bayesian classification
+    unassigned_fasta = outdir / (prefix + "_unassigned_seq.fasta") # non-archive version of below which i pass to phyloseq processing part to trim taxa that are still unassigned after bayesian classification
     with open(unassigned_fasta, "w") as f: # write out file with only the sequences corresponding to unassigned features
         for feat in features_index:
             f.write(f">{feat}\n")
@@ -409,7 +409,7 @@ def filter_seqs(logger, asv_seqs, unassigned, outdir):
     logger.info(f"DONE filtering {prefix} sequences")
     logger.info(f"importing filtered {prefix} seqs")
 
-    asv_out =  outdir / (prefix + "_unassigned_seqs.qza") # unassigned seqs that go to the next classifier 
+    asv_out =  outdir / (prefix + "_unassigned_seq.qza") # unassigned seqs that go to the next classifier 
 
     try:
         subprocess.run( # import filtered sequences
