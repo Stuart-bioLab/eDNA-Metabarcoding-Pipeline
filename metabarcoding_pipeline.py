@@ -557,9 +557,6 @@ def main():
         sys.exit(1)
     logger.info("loaded blast reference db files")
 
-    metadata = Path(args.metadata).resolve()
-    logger.info(f"loaded metadata: {metadata}")
-
     if not args.archive: # only import reads if archive not supplied (this takes a while)
         reads_archive = Path(outdir / "reads.qza").resolve()
         if not args.manifest:
