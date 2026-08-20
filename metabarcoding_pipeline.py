@@ -533,6 +533,26 @@ def stitch_tax_files(logger, tax_files, outdir):
     logger.info(f"DONE assembling tax file")
     return final_tax_tsv
 
+def make_tax_map(final_tax_tsv):
+    """Read taxonomy file. Store ids with assignments in dict."""
+    with open(final_tax_tsv) as f: # read taxonomy file and store each assignment
+        f.readline()
+        tax_lines = f.readlines()
+
+    tax_hash = {} # map ids to best assignment
+    for line in tax_lines:
+        otuid, taxon, cons, conf = line.split("\t") # get all elements from the line
+        tax_split = taxon.split(";")
+        best_assignment = tax_split[-1] # check the level of assignment
+        assignment_level = best_assignment[:3] # prefix tells the level of the assignment
+        if assignment_level == "s__": # qiime lists both genus and species at the species level
+            genus, species = best_assignment[3:].split("_")
+            best_assignment = genus + " " + species
+        else:
+            best_assignment = best_assignment[3:] # get just the name not the level prefix
+        tax_hash[otuid] = best_assignment
+    return tax_hash
+
 def map_tax_to_feat_table(logger, feat_table, final_tax_tsv, outdir):
     """Map taxonomy assignments to the DADA2 feature table."""
     logger.info("mapping tax file to feature table")
@@ -558,11 +578,15 @@ def map_tax_to_feat_table(logger, feat_table, final_tax_tsv, outdir):
         sys.exit(1)
     logger.info(f"converted {feat_table_biom} to {feat_table_tsv}")
 
-    feat_tab_df = pd.read_csv(feat_table_tsv, sep="\t", skiprows=1) # skip the Commented row of the converted biom file
+    feat_tab_df = pd.read_csv(
+        feat_table_tsv,
+        sep="\t",
+        skiprows=1 # skip the commented row of the converted biom file
+    ).rename(columns={"#OTU ID": "Taxon"}) # change name of taxon column
     tax_tab_df = pd.read_csv(final_tax_tsv, sep="\t")
 
-    print(feat_tab_df.head())
-    print(tax_tab_df.head())
+    tax_hash = make_tax_map(final_tax_tsv)
+
 
 def main():
     config = load_config("config.ini")
