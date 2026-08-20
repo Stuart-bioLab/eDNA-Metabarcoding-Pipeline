@@ -535,6 +535,7 @@ def stitch_tax_files(logger, tax_files, outdir):
 
 def make_tax_map(tax_file):
     """Read taxonomy file. Store ids with assignments in dict."""
+    logger.info("assembling hash for ids and taxonomy")
     with open(tax_file) as f: # read taxonomy file and store each assignment
         f.readline()
         tax_lines = f.readlines()
@@ -551,10 +552,13 @@ def make_tax_map(tax_file):
         else:
             best_assignment = best_assignment[3:] # get just the name not the level prefix
         tax_hash[otuid] = best_assignment
+    
+    logger.info("DONE assembling hash")
     return tax_hash
 
 def collapse_unique_hits(feat_tab):
     """Sum reads across duplicates."""
+    logger.info("collapsing duplicates and summing counts")
     feat_tab_transpose = feat_tab.T # sets tax assignments to columns
     unique_hits = feat_tab_transpose.columns.unique() # get all hits without duplicates
     unique_cols = {}
@@ -568,14 +572,16 @@ def collapse_unique_hits(feat_tab):
     
     feat_tab_unique = pd.DataFrame(data=unique_cols).T
     feat_tab_unique.index.rename("Taxon", inplace=True)
+    logger.info("DONE getting unique hits")
     return feat_tab_unique
 
 def map_tax_to_feat_table(logger, feat_table, final_tax_tsv, outdir):
     """Map taxonomy assignments to the DADA2 feature table."""
-    logger.info("mapping tax file to feature table")
+    logger.info("starting tax mapping")
     new_name = "feat_table.biom" # qiime stores dada2 feature table as a biom file
     feat_table_biom = extract_qza(logger, feat_table, new_name, outdir)
     
+    logger.info(f"converting {feat_table_biom} to tsv")
     feat_table_tsv = outdir / "feat_table.tsv"
     try:
         subprocess.run( # convert biom file to tsv for parsing
@@ -604,6 +610,7 @@ def map_tax_to_feat_table(logger, feat_table, final_tax_tsv, outdir):
 
     tax_hash = make_tax_map(final_tax_tsv)
 
+    logger.info("replacing ids with best assignment")
     assigned_tax_col = [] # column to replace ids in final df
     for otuid in feat_tab_df["Taxon"]:
         try:
@@ -614,12 +621,15 @@ def map_tax_to_feat_table(logger, feat_table, final_tax_tsv, outdir):
     feat_tab_df["Taxon"] = assigned_tax_col # set taxonomy in place of ids
     feat_tab_assigned = feat_tab_df.set_index("Taxon") # set assignment to index
     feat_tab_assigned.to_csv(outdir / "feat_tab_assigned.tsv", sep="\t") # write out assigned tsv
+    logger.info(f"wrote feat table with best assignment to {feat_tab_assigned}")
 
     feat_tab_no_ids = feat_tab_assigned.drop("Unassigned", axis=0) # drop rows where the ASV was not assigned
     feat_tab_no_ids.to_csv(outdir / "feat_tab_no_ids.tsv", sep="\t")
+    logger.info(f"wrote feat table without unassigned ASVS to {feat_tab_no_ids}")
 
     feat_tab_unique = collapse_unique_hits(feat_tab_no_ids)
     feat_tab_unique.to_csv(outdir / "feat_tab_unique.tsv", sep="\t")
+    logger.info(f"wrote feat table without summed dupes to {feat_tab_no_ids}")
 
 def main():
     config = load_config("config.ini")
