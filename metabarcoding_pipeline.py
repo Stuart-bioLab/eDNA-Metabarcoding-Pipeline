@@ -242,7 +242,7 @@ def trim_reads(logger, primers, reads_archive, threads, outdir):
 def denoise_reads(logger, reads, params, outdir):
     """Run DADA2 to denoise reads and generate feature table."""
     asv_seqs = outdir / "asv_seqs.qza"
-    feat_table = outdir / "feat_table"
+    feat_table = outdir / "feat_table.qza"
     denoise_stats = outdir / "denoise_stats"
 
     logger.info("denoising reads")
