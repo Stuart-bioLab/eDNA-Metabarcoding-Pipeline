@@ -533,9 +533,9 @@ def stitch_tax_files(logger, tax_files, outdir):
     logger.info(f"DONE assembling tax file")
     return final_tax_tsv
 
-def make_tax_map(final_tax_tsv):
+def make_tax_map(tax_file):
     """Read taxonomy file. Store ids with assignments in dict."""
-    with open(final_tax_tsv) as f: # read taxonomy file and store each assignment
+    with open(tax_file) as f: # read taxonomy file and store each assignment
         f.readline()
         tax_lines = f.readlines()
 
@@ -552,6 +552,23 @@ def make_tax_map(final_tax_tsv):
             best_assignment = best_assignment[3:] # get just the name not the level prefix
         tax_hash[otuid] = best_assignment
     return tax_hash
+
+def collapse_unique_hits(feat_tab):
+    """Sum reads across duplicates."""
+    feat_tab_transpose = feat_tab.T # sets tax assignments to columns
+    unique_hits = feat_tab_transpose.columns.unique() # get all hits without duplicates
+    unique_cols = {}
+    for hit in unique_hits:
+        hit_cols = feat_tab_transpose[hit]
+        one_hit = len(hit_cols.shape) < 2 # check if there are multiple cols and thus duplicates
+        if one_hit:
+            unique_cols[hit] = hit_cols # if there's no dupes, just port the data over
+        else:
+            unique_cols[hit] = hit_cols.sum(axis=1) # sum counts if there's dupes
+    
+    feat_tab_unique = pd.DataFrame(data=unique_cols).T
+    feat_tab_unique.index.rename("Taxon", inplace=True)
+    return feat_tab_unique
 
 def map_tax_to_feat_table(logger, feat_table, final_tax_tsv, outdir):
     """Map taxonomy assignments to the DADA2 feature table."""
@@ -587,6 +604,22 @@ def map_tax_to_feat_table(logger, feat_table, final_tax_tsv, outdir):
 
     tax_hash = make_tax_map(final_tax_tsv)
 
+    assigned_tax_col = [] # column to replace ids in final df
+    for otuid in feat_tab_df["Taxon"]:
+        try:
+            assigned_tax_col.append(tax_hash[otuid])
+        except KeyError:
+            assigned_tax_col.append("Unassigned") # if id was not assigned, mark so that it can be removed later
+    
+    feat_tab_df["Taxon"] = assigned_tax_col # set taxonomy in place of ids
+    feat_tab_assigned = feat_tab_df.set_index("Taxon") # set assignment to index
+    feat_tab_assigned.to_csv(outdir / "feat_tab_assigned.tsv", sep="\t") # write out assigned tsv
+
+    feat_tab_no_ids = feat_tab_assigned.drop("Unassigned", axis=0) # drop rows where the ASV was not assigned
+    feat_tab_no_ids.to_csv(outdir / "feat_tab_no_ids.tsv", sep="\t")
+
+    feat_tab_unique = collapse_unique_hits(feat_tab_no_ids)
+    feat_tab_unique.to_csv(outdir / "feat_tab_unique.tsv", sep="\t")
 
 def main():
     config = load_config("config.ini")
