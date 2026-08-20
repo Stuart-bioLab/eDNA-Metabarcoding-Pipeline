@@ -533,7 +533,7 @@ def stitch_tax_files(logger, tax_files, outdir):
     logger.info(f"DONE assembling tax file")
     return final_tax_tsv
 
-def make_tax_map(tax_file):
+def make_tax_map(logger, tax_file):
     """Read taxonomy file. Store ids with assignments in dict."""
     logger.info("assembling hash for ids and taxonomy")
     with open(tax_file) as f: # read taxonomy file and store each assignment
@@ -556,7 +556,7 @@ def make_tax_map(tax_file):
     logger.info("DONE assembling hash")
     return tax_hash
 
-def collapse_unique_hits(feat_tab):
+def collapse_unique_hits(logger, feat_tab):
     """Sum reads across duplicates."""
     logger.info("collapsing duplicates and summing counts")
     feat_tab_transpose = feat_tab.T # sets tax assignments to columns
@@ -608,7 +608,7 @@ def map_tax_to_feat_table(logger, feat_table, final_tax_tsv, outdir):
     ).rename(columns={"#OTU ID": "Taxon"}) # change name of taxon column
     tax_tab_df = pd.read_csv(final_tax_tsv, sep="\t")
 
-    tax_hash = make_tax_map(final_tax_tsv)
+    tax_hash = make_tax_map(logger, final_tax_tsv)
 
     logger.info("replacing ids with best assignment")
     assigned_tax_col = [] # column to replace ids in final df
@@ -627,7 +627,7 @@ def map_tax_to_feat_table(logger, feat_table, final_tax_tsv, outdir):
     feat_tab_no_ids.to_csv(outdir / "feat_tab_no_ids.tsv", sep="\t")
     logger.info(f"wrote feat table without unassigned ASVS to {feat_tab_no_ids}")
 
-    feat_tab_unique = collapse_unique_hits(feat_tab_no_ids)
+    feat_tab_unique = collapse_unique_hits(logger, feat_tab_no_ids)
     feat_tab_unique.to_csv(outdir / "feat_tab_unique.tsv", sep="\t")
     logger.info(f"wrote feat table without summed dupes to {feat_tab_no_ids}")
 
