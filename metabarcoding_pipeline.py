@@ -620,16 +620,19 @@ def map_tax_to_feat_table(logger, feat_table, final_tax_tsv, outdir):
     
     feat_tab_df["Taxon"] = assigned_tax_col # set taxonomy in place of ids
     feat_tab_assigned = feat_tab_df.set_index("Taxon") # set assignment to index
-    feat_tab_assigned.to_csv(outdir / "feat_tab_assigned.tsv", sep="\t") # write out assigned tsv
-    logger.info(f"wrote feat table with best assignment to {feat_tab_assigned}")
+    feat_tab_assigned_out_tsv = outdir / "feat_tab_assigned.tsv"
+    feat_tab_assigned.to_csv(feat_tab_assigned_out_tsv, sep="\t") # write out assigned tsv
+    logger.info(f"wrote feat table with best assignment to {feat_tab_assigned_out_tsv}")
 
     feat_tab_no_ids = feat_tab_assigned.drop("Unassigned", axis=0) # drop rows where the ASV was not assigned
-    feat_tab_no_ids.to_csv(outdir / "feat_tab_no_ids.tsv", sep="\t")
-    logger.info(f"wrote feat table without unassigned ASVS to {feat_tab_no_ids}")
+    feat_tab_no_ids_out_tsv = outdir / "feat_tab_no_ids.tsv"
+    feat_tab_no_ids.to_csv(feat_tab_no_ids_out_tsv, sep="\t")
+    logger.info(f"wrote feat table without unassigned ASVS to {feat_tab_no_ids_out_tsv}")
 
     feat_tab_unique = collapse_unique_hits(logger, feat_tab_no_ids)
-    feat_tab_unique.to_csv(outdir / "feat_tab_unique.tsv", sep="\t")
-    logger.info(f"wrote feat table without summed dupes to {feat_tab_no_ids}")
+    feat_tab_unique_out_tsv = outdir / "feat_tab_unique.tsv"
+    feat_tab_unique.to_csv(feat_tab_unique_out_tsv, sep="\t")
+    logger.info(f"wrote feat table without summed dupes to {feat_tab_unique_out_tsv}")
 
 def main():
     config = load_config("config.ini")
@@ -736,10 +739,11 @@ def main():
     else:
         logger.info("skipping straight to mapping step")
         tax_files = [
-            "/home/bmogi/eDNA-Metabarcoding-Pipeline/post-tax-files/vsearch_retained_tax.tsv",
-            "/home/bmogi/eDNA-Metabarcoding-Pipeline/post-tax-files/nb_retained_tax.tsv"
+            "post-tax-files/vsearch_retained_tax.tsv",
+            "post-tax-files/nb_retained_tax.tsv",
+            "post-tax-files/blast_retained_tax.tsv"
         ]
-        feat_table = "/home/bmogi/eDNA-Metabarcoding-Pipeline/post-tax-files/feat_table.qza"
+        feat_table = "post-tax-files/feat_table.qza"
 
     mapping_dir = outdir / "mapping_files"
     mapping_dir.mkdir()
