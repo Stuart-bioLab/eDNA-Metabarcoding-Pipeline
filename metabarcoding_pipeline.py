@@ -634,7 +634,7 @@ def map_tax_to_feat_table(logger, feat_table, final_tax_tsv, outdir):
     feat_tab_unique = collapse_unique_hits(logger, feat_tab_no_ids)
     feat_tab_unique_out_tsv = outdir / "feat_tab_unique.tsv"
     feat_tab_unique.to_csv(feat_tab_unique_out_tsv, sep="\t")
-    logger.info(f"wrote feat table without summed dupes to {feat_tab_unique_out_tsv}")
+    logger.info(f"wrote feat table with counts summed across taxa to {feat_tab_unique_out_tsv}")
 
 def main():
     config = load_config("config.ini")
