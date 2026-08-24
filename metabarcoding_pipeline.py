@@ -523,8 +523,8 @@ def stitch_tax_files(logger, tax_files, outdir):
     for file in tax_files:
         try:
             current_tax_df = pd.read_csv(file, sep="\t") # read in current taxonomy file as dataframe
-        except FileNotFoundError:
-            logger.error(f"{file} could not be opened. skipping file.")
+        except ValueError:
+            logger.error("one file could not be opened. skipping file.")
             continue
         all_tax_dfs.append(current_tax_df)
     final_tax_df = pd.concat(all_tax_dfs).drop_duplicates() # stitch taxonomy files together and drop duplicates
