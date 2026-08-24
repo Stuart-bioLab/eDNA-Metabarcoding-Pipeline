@@ -10,22 +10,11 @@ import re
 def parse_args():
     """parse arguments, making sure data is accessible and study name is correct"""
     parser = argparse.ArgumentParser()
-    parser.add_argument("-m", "--metadata", required=True, help="metadata file mapping sample ids to study")
-    parser.add_argument("-s", "--study", required=True, help="possible study types: DamBaseline, JuneJulyTemporal, EbonyTemporal, Filter_5.0v0.45")
+    parser.add_argument("-m", "--metadata", help="metadata file mapping sample ids to study")
+    parser.add_argument("-s", "--study", help="possible study types: DamBaseline, JuneJulyTemporal, EbonyTemporal, Filter_5.0v0.45")
     parser.add_argument("-d", "--data", required=True, help="directory with read files to be searched recursively")
+    parser.add_argument("-b", "--blanks", action="store_true", help="generate manifest for extraction and field blanks and positive and negative samples only")
     args = parser.parse_args()
-
-    studies = ["DamBaseline", "JuneJulyTemporal", "EbonyTemporal", "Filter_5.0v0.45"]
-    if args.study not in studies:
-        print("possible studies include:", end=" ")
-        for study in studies:
-            print(study, end=" ")
-        print()
-        sys.exit(1)
-
-    if not os.path.exists(args.metadata): # make sure metadata is accessible
-        print("error: metadata not accessible")
-        sys.exit(1)
 
     if not os.path.isdir(args.data): # make sure data is accessible
         print("error: disk not mounted")
@@ -111,11 +100,43 @@ def generate_metadata(manif_ids, meta_df, study):
 
     return
 
+def get_blanks(data):
+    """Generate manifest file for just extraction blanks, etc."""
+    manifest = f"blank_manifest.tsv"
+
+    pattern = re.compile(r"(^EB-|FB-)") # match this regex to get extraction blanks
+    exclude_dirs = {"trimmed", "mussel", "$RECYCLE.BIN", "extra", "Picq04_4.15.2026"} # ignore these directories for now
+    read_paths = [ # get all fastq files from all subdirs
+        str(p) for p in Path(data).rglob("*.fastq.gz") # recursively extract all fastq files
+        if exclude_dirs.isdisjoint(p.parts) # exclude paths that include these directories
+        if pattern.search(p.name)
+    ]
+
+    with open(manifest, "w") as f:
+        f.write(f"sample-id\tforward-absolute-filepath\treverse-absolute-filepath\n")
+        for i in range(0, len(read_paths), 2): # grab every other file since the reads are paired
+            forward_path = read_paths[i]
+            reverse_path = read_paths[i+1]
+            split_file_name = os.path.split(read_paths[i])[1].split("_")
+            rep_id = split_file_name[1] if split_file_name[0].startswith("SP") else split_file_name[0] # get sample id with rep number
+            f.write(f"{rep_id}\t{forward_path}\t{reverse_path}\n")
+
+    return
+
 def main():
     args = parse_args()
-    meta_df, sam_ids = subset_data(args.metadata, args.study)
-    manif_ids = generate_manifest(args.data, args.study, sam_ids)
-    generate_metadata(manif_ids, meta_df, args.study)
+    if not args.blanks:
+        if not args.metadata:
+            print("Provide metadata file")
+            sys.exit(1)
+        if not args.study:
+            print("Provide study")
+            sys.exit(1)
+        meta_df, sam_ids = subset_data(args.metadata, args.study)
+        manif_ids = generate_manifest(args.data, args.study, sam_ids)
+        generate_metadata(manif_ids, meta_df, args.study)
+    else:
+        get_blanks(args.data)
 
 if __name__ == "__main__":
     main()
