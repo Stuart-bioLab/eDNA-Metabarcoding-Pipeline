@@ -521,9 +521,11 @@ def stitch_tax_files(logger, tax_files, outdir):
 
     all_tax_dfs = [] # turn each tsv into a dataframe and store it here
     for file in tax_files:
-        if file == None:
-            logger.error("one file was None type, skipping file")
-        current_tax_df = pd.read_csv(file, sep="\t") # read in current taxonomy file as dataframe
+        try:
+            current_tax_df = pd.read_csv(file, sep="\t") # read in current taxonomy file as dataframe
+        except FileNotFoundError:
+            logger.error(f"{file} could not be opened. skipping file.")
+            continue
         all_tax_dfs.append(current_tax_df)
     final_tax_df = pd.concat(all_tax_dfs).drop_duplicates() # stitch taxonomy files together and drop duplicates
     
@@ -739,11 +741,11 @@ def main():
     else:
         logger.info("skipping straight to mapping step")
         tax_files = [
-            "post-tax-files/vsearch_retained_tax.tsv",
-            "post-tax-files/nb_retained_tax.tsv",
-            "post-tax-files/blast_retained_tax.tsv"
+            Path("post-tax-files/vsearch_retained_tax.tsv").resolve(),
+            Path("post-tax-files/nb_retained_tax.tsv").resolve(),
+            Path("post-tax-files/blast_retained_tax.tsv").resolve()
         ]
-        feat_table = "post-tax-files/feat_table.qza"
+        feat_table = Path("post-tax-files/feat_table.qza").resolve()
 
     mapping_dir = outdir / "mapping_files"
     mapping_dir.mkdir()
