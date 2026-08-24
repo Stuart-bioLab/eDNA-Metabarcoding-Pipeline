@@ -729,7 +729,7 @@ def main():
             blast_unassigned_tax, blast_retained_tax = parse_output(logger, blast_out, blast_dir, family_level)
             blast_unassigned_seq_archive, blast_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, blast_unassigned_tax, bayes_dir)
         else:
-            blast_retained_taxa = None
+            blast_retained_tax = None
             blast_unassigned_seq_fasta = None
 
         tax_files = [
