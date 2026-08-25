@@ -104,7 +104,7 @@ def get_blanks(data):
     """Generate manifest file for just extraction blanks, etc."""
     manifest = f"blank_manifest.tsv"
 
-    pattern = re.compile(r"(^EB-|FB-)") # match this regex to get extraction blanks
+    pattern = re.compile(r"(^EB-|FB-|^pos|^neg)") # match this regex to get extraction blanks
     exclude_dirs = {"trimmed", "mussel", "$RECYCLE.BIN", "extra", "Picq04_4.15.2026"} # ignore these directories for now
     read_paths = [ # get all fastq files from all subdirs
         str(p) for p in Path(data).rglob("*.fastq.gz") # recursively extract all fastq files
@@ -112,6 +112,7 @@ def get_blanks(data):
         if pattern.search(p.name)
     ]
 
+    sample_ids = []
     with open(manifest, "w") as f:
         f.write(f"sample-id\tforward-absolute-filepath\treverse-absolute-filepath\n")
         for i in range(0, len(read_paths), 2): # grab every other file since the reads are paired
@@ -119,7 +120,12 @@ def get_blanks(data):
             reverse_path = read_paths[i+1]
             split_file_name = os.path.split(read_paths[i])[1].split("_")
             rep_id = split_file_name[1] if split_file_name[0].startswith("SP") else split_file_name[0] # get sample id with rep number
+            if rep_id in sample_ids: # don't add duplicates
+                continue
+            if rep_id.endswith("mussel"): # ignore mussel blanks for now
+                continue
             f.write(f"{rep_id}\t{forward_path}\t{reverse_path}\n")
+            sample_ids.append(rep_id)
 
     return
 
