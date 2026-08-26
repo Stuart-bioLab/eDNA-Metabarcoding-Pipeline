@@ -41,7 +41,7 @@ def generate_manifest(data, study, sam_ids):
 
     exclude_dirs = {"trimmed", "mussel", "$RECYCLE.BIN", "extra"} # ignore these directories for now
     read_paths = [ # get all fastq files from all subdirs
-        str(p) for p in Path(data).rglob("*.fastq.gz") # recursively extract all fastq files
+        str(p) for p in sorted(Path(data).rglob("*.fastq.gz")) # recursively extract all fastq files
         if exclude_dirs.isdisjoint(p.parts) # exclude paths that include these directories
     ]
 
