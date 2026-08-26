@@ -41,7 +41,7 @@ def generate_manifest(data, study, sam_ids):
 
     exclude_dirs = {"trimmed", "mussel", "$RECYCLE.BIN", "extra"} # ignore these directories for now
     read_paths = [ # get all fastq files from all subdirs
-        str(p) for p in sorted(Path(data).rglob("*.fastq.gz")) # recursively extract all fastq files
+        str(p.resolve()) for p in sorted(Path(data).rglob("*.fastq.gz")) # recursively extract all fastq files
         if exclude_dirs.isdisjoint(p.parts) # exclude paths that include these directories
     ]
 
@@ -58,7 +58,6 @@ def generate_manifest(data, study, sam_ids):
                     if split_file_name[0] == "derep": # get rid of derep prefix if present
                         split_file_name.pop(0)
                     rep_id = split_file_name[1] if split_file_name[0].startswith("SP") else split_file_name[0] # get sample id with rep number
-                    print(rep_id)
                     if rep_id.endswith("mussel"): # skip mussel files
                         continue
                     if rep_id in manif_ids: # if we've already seen this sample, skip it (helps with metadata dupes)
