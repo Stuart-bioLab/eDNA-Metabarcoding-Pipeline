@@ -39,7 +39,7 @@ def generate_manifest(data, study, sam_ids):
     """grab read data from target study and write paths out to manifest tsv"""
     manifest = f"{study}_manifest.tsv"
 
-    exclude_dirs = {"trimmed", "mussel", "$RECYCLE.BIN", "extra", "Picq04_4.15.2026"} # ignore these directories for now
+    exclude_dirs = {"trimmed", "mussel", "$RECYCLE.BIN", "extra"} # ignore these directories for now
     read_paths = [ # get all fastq files from all subdirs
         str(p) for p in Path(data).rglob("*.fastq.gz") # recursively extract all fastq files
         if exclude_dirs.isdisjoint(p.parts) # exclude paths that include these directories
