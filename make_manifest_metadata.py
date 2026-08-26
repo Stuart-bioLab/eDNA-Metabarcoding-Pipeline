@@ -55,7 +55,10 @@ def generate_manifest(data, study, sam_ids):
                 if re.search(pattern, forward_path): # only grab file if it's from the target study
                     reverse_path = read_paths[i+1]
                     split_file_name = os.path.split(read_paths[i])[1].split("_")
+                    if split_file_name[0] == "derep": # get rid of derep prefix if present
+                        split_file_name.pop(0)
                     rep_id = split_file_name[1] if split_file_name[0].startswith("SP") else split_file_name[0] # get sample id with rep number
+                    print(rep_id)
                     if rep_id.endswith("mussel"): # skip mussel files
                         continue
                     if rep_id in manif_ids: # if we've already seen this sample, skip it (helps with metadata dupes)
