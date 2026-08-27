@@ -24,18 +24,26 @@ def parse_args():
 
 def subset_data(metadata, study):
     """subset data for samples from target study"""
-    meta_df = pd.read_excel(metadata) # read in metadata
+    if metadata.endswith(".tsv"):
+        meta_df = pd.read_csv(metadata, sep="\t")
+    elif metadata.endswith(".xlsx"):
+        meta_df = pd.read_excel(metadata) # read in metadata
+    else:
+        print("wrong format for metadata")
+        sys.exit(1)
     
     blank_cols = meta_df.columns[meta_df.columns.str.startswith("Unnamed")] # find metadata cols that were blank in excel
     meta_df = meta_df.drop(blank_cols, axis=1) # drop those cols
-    meta_df = meta_df[~meta_df[study].isna()] # subset for study
+
+    if study in ["DamBaseline", "JuneJulyTemporal", "EbonyTemporal", "Filter_5.0v0.45"]:
+        meta_df = meta_df[~meta_df[study].isna()] # subset for study
 
     subset_sams = list(meta_df["Sample ID"]) # grab sample ids
     meta_df.index = meta_df["Sample ID"] # set rownames to sample id
 
     return meta_df, subset_sams
 
-def generate_manifest(data, study, sam_ids):
+def generate_manifest(data, sam_ids, study="full_data"):
     """grab read data from target study and write paths out to manifest tsv"""
     manifest = f"{study}_manifest.tsv"
 
@@ -67,7 +75,7 @@ def generate_manifest(data, study, sam_ids):
 
     return manif_ids
 
-def match_ids(final_df, meta_df, rep_id):
+def match_ids(meta_df, rep_id):
     """resolve duplcates and mismatched ids"""
     meta_sample_id = "-".join(rep_id.split("-")[:2])
     in_metadata = meta_sample_id in meta_df.columns # if the sample id is in the metadata (not a D, i.e.)
@@ -76,7 +84,7 @@ def match_ids(final_df, meta_df, rep_id):
             meta_sample_id = meta_sample_id[:-1] # index for the non-duplicate id
         else:
             matched_line = ["missing"]*len(meta_df) # if its simply not in the metadata, note that
-            return final_df # and return
+            return matched_line # and return
     
     duplicate = len(meta_df[meta_sample_id].shape) > 1 # if there is more than one column, its a duplicate
     if duplicate:
@@ -86,16 +94,13 @@ def match_ids(final_df, meta_df, rep_id):
 
     return matched_line
 
-def generate_metadata(manif_ids, meta_df, study):
+def generate_metadata(manif_ids, meta_df, study="full_data"):
     """add sample metadata to replicates"""
     t_meta_df = meta_df.T # transpose metadata
-    final_merged_df = pd.DataFrame() # initialize df to output
-    final_merged_df.index = t_meta_df.index
 
     final_cols = {}
     for rep_id in manif_ids:
-        final_cols[rep_id] = match_ids(final_merged_df, t_meta_df, rep_id)
-
+        final_cols[rep_id] = match_ids(t_meta_df, rep_id)
     final_df = pd.DataFrame(final_cols).T
     final_df.index = final_df.index.rename("Replicate ID")
     final_df.to_csv(f"{study}_metadata.tsv", sep="\t") # un-transpose and write out
@@ -137,11 +142,8 @@ def main():
         if not args.metadata:
             print("Provide metadata file")
             sys.exit(1)
-        if not args.study:
-            print("Provide study")
-            sys.exit(1)
         meta_df, sam_ids = subset_data(args.metadata, args.study)
-        manif_ids = generate_manifest(args.data, args.study, sam_ids)
+        manif_ids = generate_manifest(args.data, sam_ids, args.study)
         generate_metadata(manif_ids, meta_df, args.study)
     else:
         get_blanks(args.data)
