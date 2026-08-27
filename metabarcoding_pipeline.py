@@ -660,6 +660,8 @@ def main():
             logger.error(f"database file {crabs_ref_seq} not found")
             sys.exit(1)
         logger.info("loaded crabs reference db files")
+        logger.info(f"tax ref: {crabs_ref_tax}")
+        logger.info(f"seq ref: {crabs_ref_seq}")
 
         blast_ref_tax = Path(args.blast_database_tax).resolve()
         blast_ref_seq = Path(args.blast_database_seq).resolve()
@@ -670,6 +672,8 @@ def main():
             logger.error(f"database file {blast_ref_seq} not found")
             sys.exit(1)
         logger.info("loaded blast reference db files")
+        logger.info(f"tax ref: {crabs_ref_tax}")
+        logger.info(f"seq ref: {crabs_ref_seq}")
 
         if not args.archive: # only import reads if archive not supplied (this takes a while)
             reads_archive = Path(outdir / "reads.qza").resolve()
