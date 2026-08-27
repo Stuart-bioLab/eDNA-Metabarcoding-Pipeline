@@ -548,8 +548,13 @@ def make_tax_map(logger, tax_file):
         tax_split = taxon.split(";")
         best_assignment = tax_split[-1] # check the level of assignment
         assignment_level = best_assignment[:3] # prefix tells the level of the assignment
-        if assignment_level == "s__": # qiime lists both genus and species at the species level
-            genus, species = best_assignment[3:].split("_")
+        if assignment_level == "s__": # there's different ways the species is presented in the databases
+            spec_level = best_assignment[3:].split("_") # get the assignment at the species level
+            if len(spec_level) > 1: # if its s__genus_species
+                genus, species = spec_level
+            else: # otherwise if its g__genus;s__species
+                species = spec_level[0]
+                genus = tax_split[-2][3:]
             best_assignment = genus + " " + species
         else:
             best_assignment = best_assignment[3:] # get just the name not the level prefix
