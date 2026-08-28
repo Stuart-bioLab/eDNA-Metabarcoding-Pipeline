@@ -5,4 +5,7 @@ results/
 *.xlsx
 *.fasta
 UR_Chicago_db_pipeline_v7.py
-input/
+*.docx
+*.tsv
+*.ipynb
+*.txt
