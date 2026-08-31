@@ -8,6 +8,7 @@ from Bio.Seq import Seq
 import sys
 import shutil
 import pandas as pd
+from collections import defaultdict
 
 def load_config(config_file):
     """Load configuration file."""
@@ -641,6 +642,66 @@ def map_tax_to_feat_table(logger, feat_table, final_tax_tsv, outdir):
     feat_tab_unique.to_csv(feat_tab_unique_out_tsv, sep="\t")
     logger.info(f"wrote feat table with counts summed across taxa to {feat_tab_unique_out_tsv}")
 
+    return feat_tab_unique
+
+def sum_replicates(logger, feat_tab):
+    """Split input dataframe into samples with replicates and singletons. Sum read counts across replicates. Concatenate and return dereplicated dataframe."""
+    logger.info("Summing replicates")
+    rep_ids = feat_tab.columns
+    replicated_sams = rep_ids[rep_ids.str.contains("rep")] # pull out which samples have replicates
+    feat_tab_reps = feat_tab[replicated_sams] # get samples with replicates
+    feat_tab_non_reps = feat_tab.drop(replicated_sams, axis=1) # get samples without replicates
+
+    sam_ids = defaultdict(list)
+    for rep in feat_tab_reps.columns: # map replicates to sample prefixes
+        sam = rep[:-5]
+        sam_ids[sam].append(rep) # store sample id with list of its replicates
+
+    final_tab_cols = {}
+    for sam, reps in sam_ids.items():
+        summed_reps = feat_tab_reps[reps].sum(axis=1) # sum replicates for current sample
+        final_tab_cols[sam] = summed_reps
+    
+    feat_tab_derep = pd.DataFrame(final_tab_cols)
+    final_tab_df = pd.concat([feat_tab_derep, feat_tab_non_reps], axis=1) # join dereped sampled with singletons
+
+    logger.info("DONE summing replicates")
+    return final_tab_df
+
+def decontam(logger, feat_tab, outdir):
+    """Manipulate feature table, subtracting reads from field blanks and extraction blanks."""
+    logger.info("starting decontamination")
+    
+    ftab_derep_df = sum_replicates(logger, feat_tab)
+    ftab_derep_df.to_csv(outdir / "dbase_eblank_derep_ftab.tsv", sep="\t")
+
+    extr_blank_sams = [x for x in ftab_derep_df.columns if x.startswith("EB")] # grab extraction blank samples from input feat tab
+    extr_blank_totals = ftab_derep_df[extr_blank_sams].sum(axis=1) # get totals across all extraction blanks (kimia pooled them)
+    extr_blank_totals.to_csv(outdir / "eblank_derep_totals.tsv", sep="\t")
+
+    field_blank_sams = [x for x in ftab_derep_df.columns if x.endswith("FB")] # grab field blank samples from input feat tab
+    field_blank_totals = ftab_derep_df[field_blank_sams].sum(axis=1) # get totals across all field blanks (not sure if she pools these too)
+    field_blank_totals.to_csv(outdir / "fblank_derep_totals.tsv", sep="\t")
+
+    fblank_minus_eblank_totals = field_blank_totals.sub(extr_blank_totals).clip(lower=0) # subtract extraction blank reads from field blank reads
+    fblank_minus_eblank_totals.to_csv(outdir / "fblank_derep_minus_eblank_totals.tsv", sep="\t")
+
+    ftab_derep_df_drop_blanks = ftab_derep_df.drop(extr_blank_sams + field_blank_sams, axis=1) # drop extraction and field blank samples, leaving just dam baseline samples
+    ftab_derep_df_drop_blanks.to_csv(outdir / "dbase_derep_no_blanks.tsv", sep="\t")
+
+    ftab_derep_sub_eblank = ftab_derep_df_drop_blanks.sub(extr_blank_totals, axis=0).clip(lower=0) # subtract extraction blank reads from dam baseline samples
+    ftab_derep_sub_eblank.to_csv(outdir / "dbase_derep_minus_eblank.tsv", sep="\t")
+
+    ftab_derep_sub_eblank_fblank = ftab_derep_sub_eblank.sub(fblank_minus_eblank_totals, axis=0).clip(lower=0) # then, subtract field blank reads
+    ftab_derep_sub_eblank_fblank_out = outdir / "dbase_derep_minus_eblank_fblank.tsv"
+    ftab_derep_sub_eblank_fblank.to_csv(ftab_derep_sub_eblank_fblank_out, sep="\t")
+
+    logger.info("DONE with decontamination")
+    logger.info(f"Wrote out intermediate feat tabs. Find them in {outdir}")
+    logger.info(f"Wrote out decontaminated feat tab to {ftab_derep_sub_eblank_fblank_out}")
+
+    return ftab_derep_sub_eblank_fblank
+
 def main():
     config = load_config("config.ini")
     args = get_args(config)
@@ -759,7 +820,11 @@ def main():
     mapping_dir = outdir / "mapping_files"
     mapping_dir.mkdir()
     final_tax_tsv = stitch_tax_files(logger, tax_files, mapping_dir)
-    map_tax_to_feat_table(logger, feat_table, final_tax_tsv, mapping_dir)
+    feat_tab_mapped = map_tax_to_feat_table(logger, feat_table, final_tax_tsv, mapping_dir)
+
+    decontam_dir = outdir / "decontam_files"
+    decontam_dir.mkdir()
+    feat_tab_decontamed = decontam(logger, feat_tab_mapped, decontam_dir)
 
     logger.info("pipeline end")
 
