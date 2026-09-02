@@ -822,9 +822,9 @@ def main():
     final_tax_tsv = stitch_tax_files(logger, tax_files, mapping_dir)
     feat_tab_mapped = map_tax_to_feat_table(logger, feat_table, final_tax_tsv, mapping_dir)
 
-    decontam_dir = outdir / "decontam_files"
-    decontam_dir.mkdir()
-    feat_tab_decontamed = decontam(logger, feat_tab_mapped, decontam_dir)
+    # decontam_dir = outdir / "decontam_files"
+    # decontam_dir.mkdir()
+    # feat_tab_decontamed = decontam(logger, feat_tab_mapped, decontam_dir)
 
     logger.info("pipeline end")
 
