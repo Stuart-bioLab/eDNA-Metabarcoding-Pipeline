@@ -169,9 +169,8 @@ def write_sample_manifest(sample_read_map, reads_list, study, other_reads, outdi
     """Generate manifest file containing read filepaths for all available samples in target study"""
     read_prefix_list = get_read_file_prefixes(sample_read_map)
     if other_reads:
-        for r in other_reads.split(","):
+        for r in other_reads.split(","): # add manually input reads
             read_prefix_list.append(r)
-    print(read_prefix_list)
     filepath_dict = get_filepaths(read_prefix_list, reads_list)
 
     outfile = outdir / f"{study}_manifest.tsv"
