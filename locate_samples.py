@@ -14,6 +14,7 @@ def get_args():
     parser.add_argument("-d", "--data", help="Path to dir containing sequence read files.")
     parser.add_argument("-s", "--study", help="Target study to subset reads for.")
     parser.add_argument("-f", "--file", help="Provide tsv mapping read prefix to filepath.")
+    parser.add_argument("-a", "--add_reads", help="Comma delimited list of prefixes to also add to manifest. Add these after manually finding typos etc.")
     args = parser.parse_args()
     return args
 
@@ -93,8 +94,7 @@ def match_sample_ids(infile, meta_sam_ids, outdir):
             elif s[:-1] in read_prefixes: # check if samples were pooled, e.g. NAD-DNL1 and NAD-DNL2 pooled as NAD-DNL
                 sample_id_map[s].append(s[:-1])
             else: # otherwise, find close file names
-                pre_hyphen_sam_id = s.split("-")[0]
-                pattern = rf"{pre_hyphen_sam_id}-.*" # check for typos
+                pattern = rf"{s[:-1]}.*" # check for typos
                 for p in read_prefixes:
                     if re.match(pattern, p):
                         sample_id_map[s].append(p)
@@ -165,9 +165,13 @@ def get_filepaths(prefix_list, in_file):
 
     return filepath_dict
 
-def write_sample_manifest(sample_read_map, reads_list, study, outdir):
+def write_sample_manifest(sample_read_map, reads_list, study, other_reads, outdir):
     """Generate manifest file containing read filepaths for all available samples in target study"""
     read_prefix_list = get_read_file_prefixes(sample_read_map)
+    if other_reads:
+        for r in other_reads.split(","):
+            read_prefix_list.append(r)
+    print(read_prefix_list)
     filepath_dict = get_filepaths(read_prefix_list, reads_list)
 
     outfile = outdir / f"{study}_manifest.tsv"
@@ -251,6 +255,7 @@ def main():
     study = args.study
     metadata = "FReDNA_master_metadata.xlsx"
     blank_map = "all_sample_metadata.xlsx"
+    other_reads = args.add_reads
 
     studies = ["DamBaseline", "JuneJulyTemporal", "EbonyTemporal", "Filter_0.5v0.45"]
     if study not in studies:
@@ -259,6 +264,8 @@ def main():
         sys.exit(1)
 
     outdir = Path("metadata_readfile_bridge") / study
+    if outdir.is_dir():
+        shutil.rmtree(outdir)
     outdir.mkdir(exist_ok=True, parents=True)
     full_meta_df, meta_study_df, study_ids = subset_metadata(metadata, study, outdir)
     
@@ -271,7 +278,7 @@ def main():
     
     sample_read_map = match_sample_ids(reads_list, study_ids, outdir)
     field_blank_map = group_by_field_blank(meta_study_df, full_meta_df, study, outdir)
-    study_manif = write_sample_manifest(sample_read_map, reads_list, study, outdir)
+    study_manif = write_sample_manifest(sample_read_map, reads_list, study, other_reads, outdir)
     append_extraction_blanks(study_manif, blank_map, reads_list, study, outdir)
 
 if __name__ == "__main__":
