@@ -118,6 +118,7 @@ def group_by_field_blank(df, meta_df, study, outdir):
     outfile = outdir / "field_blank_map.tsv"
     with open(outfile, "w") as f:
         f.write(f"sample-id\t{study}-field-blank\tother-field-blank\tdate-collected\n")
+        non_study_fbs = []
         for k, v in date_dict.items():
             study_fb = None # if field blank is on current study
             other_fb = None # if field blank is on a different study
@@ -125,13 +126,18 @@ def group_by_field_blank(df, meta_df, study, outdir):
             if not study_fb: # if field blank is not in target study subset (was collected on same day with other study)
                 all_samples_that_day = meta_df[meta_df["Date Collected"] == k]["Sample ID"] # look at all samples collected on target date
                 other_fb = [x for x in all_samples_that_day if "FB" in x] # isolate the field blank
+                for fb in other_fb: # add field blank even if its not on study
+                    non_study_fbs.append(fb)
             date_collected = f"{k.month}/{k.day}/{k.year}" # reformat date
             study_fb = "NA" if not study_fb else "".join(study_fb)
             other_fb = "NA" if not other_fb else "".join(other_fb)
             for sam_id in v:
                 f.write(f"{sam_id}\t{study_fb}\t{other_fb}\t{date_collected}\n")
     
-    return outfile
+    if not non_study_fbs:
+        non_study_fbs = None
+
+    return outfile, non_study_fbs
 
 def get_read_file_prefixes(infile):
     """Get all unique filepath prefixes that correspond to metadata entries."""
@@ -169,7 +175,7 @@ def write_sample_manifest(sample_read_map, reads_list, study, other_reads, outdi
     """Generate manifest file containing read filepaths for all available samples in target study"""
     read_prefix_list = get_read_file_prefixes(sample_read_map)
     if other_reads:
-        for r in other_reads.split(","): # add manually input reads
+        for r in other_reads: # add manually input reads
             read_prefix_list.append(r)
     filepath_dict = get_filepaths(read_prefix_list, reads_list)
 
@@ -254,7 +260,7 @@ def main():
     study = args.study
     metadata = "FReDNA_master_metadata.xlsx"
     blank_map = "all_sample_metadata.xlsx"
-    other_reads = args.add_reads
+    input_reads = args.add_reads
 
     studies = ["DamBaseline", "JuneJulyTemporal", "EbonyTemporal", "Filter_0.5v0.45"]
     if study not in studies:
@@ -276,7 +282,16 @@ def main():
             sys.exit(1)
     
     sample_read_map = match_sample_ids(reads_list, study_ids, outdir)
-    field_blank_map = group_by_field_blank(meta_study_df, full_meta_df, study, outdir)
+    field_blank_map, non_study_fbs = group_by_field_blank(meta_study_df, full_meta_df, study, outdir)
+
+    if non_study_fbs: # add field blanks that are not on target study to manifest so they can also be processed (if files exist)
+        if not input_reads: # if there are no other prefixes given at command line
+            other_reads = non_study_fbs
+        else: # otherwise, search for other field blanks if files exist
+            other_reads = input_reads.split(",")
+            for fb in non_study_fbs: # set field blanks up to be added to manifest if they are non on target study
+                other_reads.append(fb)
+
     study_manif = write_sample_manifest(sample_read_map, reads_list, study, other_reads, outdir)
     append_extraction_blanks(study_manif, blank_map, reads_list, study, outdir)
 
