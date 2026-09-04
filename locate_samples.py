@@ -176,7 +176,8 @@ def write_sample_manifest(sample_read_map, reads_list, study, other_reads, outdi
     read_prefix_list = get_read_file_prefixes(sample_read_map)
     if other_reads:
         for r in other_reads: # add manually input reads
-            read_prefix_list.append(r)
+            if r not in read_prefix_list:
+                read_prefix_list.append(r)
     filepath_dict = get_filepaths(read_prefix_list, reads_list)
 
     outfile = outdir / f"{study}_manifest.tsv"
