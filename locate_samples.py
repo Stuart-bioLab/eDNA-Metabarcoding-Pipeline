@@ -252,6 +252,8 @@ def append_extraction_blanks(input_manif, eblank_metadata, reads_list, study, ou
                 rep_id = split_path_name[1] if split_path_name[0].startswith("SP") else split_path_name[0]
                 if "mussel" in rep_id:
                     continue
+                fpath = fpath.replace("/mnt/d/", "/mnt/g/")
+                rpath = rpath.replace("/mnt/d/", "/mnt/g/")
                 m.write(f"{rep_id}\t{fpath}\t{rpath}\n")
 
 def main():
