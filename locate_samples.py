@@ -181,6 +181,7 @@ def write_sample_manifest(sample_read_map, reads_list, study, other_reads, outdi
     filepath_dict = get_filepaths(read_prefix_list, reads_list)
 
     outfile = outdir / f"{study}_manifest.tsv"
+    seen_rep_ids = [] # store replicate ids here so we don't enter duplicates into the manifest
     with open(outfile, "w") as f:
         f.write("sample-id\tforward-absolute-filepath\treverse-absolute-filepath\n")
         for v in filepath_dict.values():
@@ -192,7 +193,9 @@ def write_sample_manifest(sample_read_map, reads_list, study, other_reads, outdi
                 reverse_path = sorted_filepaths[i+1]
                 split_file_name = forward_path.split("/")[-1].split("_")
                 replicate_id = split_file_name[1] if split_file_name[0].startswith("SP") else split_file_name[0]
-                f.write(f"{replicate_id}\t{forward_path}\t{reverse_path}\n")
+                if replicate_id not in seen_rep_ids:
+                    f.write(f"{replicate_id}\t{forward_path}\t{reverse_path}\n")
+                    seen_rep_ids.append(replicate_id)
     
     return outfile
 
