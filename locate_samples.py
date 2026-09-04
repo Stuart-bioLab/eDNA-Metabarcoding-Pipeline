@@ -246,6 +246,7 @@ def append_extraction_blanks(input_manif, eblank_metadata, reads_list, study, ou
     final_manif = outdir / f"final_{study}_manifest.tsv"
     shutil.copy(input_manif, final_manif)
 
+    seen_rep_ids = [] # store rep ids here just like with samples
     with open(final_manif, "a") as m:
         for i in range(0, len(lines), 2):
             sam_id, fpath = lines[i].split("\t")
@@ -257,7 +258,9 @@ def append_extraction_blanks(input_manif, eblank_metadata, reads_list, study, ou
                     continue
                 fpath = fpath.replace("/mnt/d/", "/mnt/g/")
                 rpath = rpath.replace("/mnt/d/", "/mnt/g/")
-                m.write(f"{rep_id}\t{fpath}\t{rpath}\n")
+                if rep_id not in seen_rep_ids:
+                    m.write(f"{rep_id}\t{fpath}\t{rpath}\n")
+                    seen_rep_ids.append(rep_id)
 
 def main():
     args = get_args()
