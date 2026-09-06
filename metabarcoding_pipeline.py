@@ -119,8 +119,8 @@ def get_args(config):
     )
 
     parser.add_argument( # FOR DEV PURPOSES
-        "--skip_to_mapping",
-        action="store_true"
+        "--mapped_feat_tab",
+        default=None
     )
 
     return parser.parse_args()
@@ -711,7 +711,7 @@ def main():
     threads = args.threads
     logger.info(f"starting pipeline with {threads} threads")
 
-    if not args.skip_to_mapping:
+    if not args.mapped_feat_tab:
         crabs_ref_tax = Path(args.crabs_database_tax).resolve()
         crabs_ref_seq = Path(args.crabs_database_seq).resolve()
         if not crabs_ref_tax.is_file():
@@ -807,24 +807,18 @@ def main():
             bayes_retained_tax,
             blast_retained_tax
         ]
-    
+
+        mapping_dir = outdir / "mapping_files"
+        mapping_dir.mkdir()
+        final_tax_tsv = stitch_tax_files(logger, tax_files, mapping_dir)
+        feat_tab_mapped = map_tax_to_feat_table(logger, feat_table, final_tax_tsv, mapping_dir)
+
     else:
-        logger.info("skipping straight to mapping step")
-        tax_files = [
-            Path("post-tax-files/vsearch_retained_tax.tsv").resolve(),
-            Path("post-tax-files/nb_retained_tax.tsv").resolve(),
-            Path("post-tax-files/blast_retained_tax.tsv").resolve()
-        ]
-        feat_table = Path("post-tax-files/feat_table.qza").resolve()
+        feat_tab_mapped = args.mapped_feat_tab
 
-    mapping_dir = outdir / "mapping_files"
-    mapping_dir.mkdir()
-    final_tax_tsv = stitch_tax_files(logger, tax_files, mapping_dir)
-    feat_tab_mapped = map_tax_to_feat_table(logger, feat_table, final_tax_tsv, mapping_dir)
-
-    # decontam_dir = outdir / "decontam_files"
-    # decontam_dir.mkdir()
-    # feat_tab_decontamed = decontam(logger, feat_tab_mapped, decontam_dir)
+    decontam_dir = outdir / "decontam_files"
+    decontam_dir.mkdir()
+    feat_tab_decontamed = decontam(logger, feat_tab_mapped, decontam_dir)
 
     logger.info("pipeline end")
 
