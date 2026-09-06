@@ -279,7 +279,7 @@ def main():
         print(", ".join(studies))
         sys.exit(1)
 
-    outdir = Path("metadata_readfile_bridge") / study
+    outdir = Path("sample_mapping_files") / study
     outdir.mkdir(exist_ok=True, parents=True)
     full_meta_df, meta_study_df, study_ids = subset_metadata(metadata, study, outdir)
     
