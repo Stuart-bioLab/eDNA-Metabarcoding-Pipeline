@@ -118,11 +118,6 @@ def get_args(config):
         help="maximum number of hits to keep for blast query"
     )
 
-    parser.add_argument( # FOR DEV PURPOSES
-        "--mapped_feat_tab",
-        default=None
-    )
-
     return parser.parse_args()
 
 def create_outdir(base):
@@ -644,64 +639,6 @@ def map_tax_to_feat_table(logger, feat_table, final_tax_tsv, outdir):
 
     return feat_tab_unique
 
-def sum_replicates(logger, feat_tab):
-    """Split input dataframe into samples with replicates and singletons. Sum read counts across replicates. Concatenate and return dereplicated dataframe."""
-    logger.info("Summing replicates")
-    rep_ids = feat_tab.columns
-    replicated_sams = rep_ids[rep_ids.str.contains("rep")] # pull out which samples have replicates
-    feat_tab_reps = feat_tab[replicated_sams] # get samples with replicates
-    feat_tab_non_reps = feat_tab.drop(replicated_sams, axis=1) # get samples without replicates
-
-    sam_ids = defaultdict(list)
-    for rep in feat_tab_reps.columns: # map replicates to sample prefixes
-        sam = rep[:-5]
-        sam_ids[sam].append(rep) # store sample id with list of its replicates
-
-    final_tab_cols = {}
-    for sam, reps in sam_ids.items():
-        summed_reps = feat_tab_reps[reps].sum(axis=1) # sum replicates for current sample
-        final_tab_cols[sam] = summed_reps
-    
-    feat_tab_derep = pd.DataFrame(final_tab_cols)
-    final_tab_df = pd.concat([feat_tab_derep, feat_tab_non_reps], axis=1) # join dereped sampled with singletons
-
-    logger.info("DONE summing replicates")
-    return final_tab_df
-
-def decontam(logger, feat_tab, outdir):
-    """Manipulate feature table, subtracting reads from field blanks and extraction blanks."""
-    logger.info("starting decontamination")
-    
-    ftab_derep_df = sum_replicates(logger, feat_tab)
-    ftab_derep_df.to_csv(outdir / "dbase_eblank_derep_ftab.tsv", sep="\t")
-
-    extr_blank_sams = [x for x in ftab_derep_df.columns if x.startswith("EB")] # grab extraction blank samples from input feat tab
-    extr_blank_totals = ftab_derep_df[extr_blank_sams].sum(axis=1) # get totals across all extraction blanks (kimia pooled them)
-    extr_blank_totals.to_csv(outdir / "eblank_derep_totals.tsv", sep="\t")
-
-    field_blank_sams = [x for x in ftab_derep_df.columns if x.endswith("FB")] # grab field blank samples from input feat tab
-    field_blank_totals = ftab_derep_df[field_blank_sams].sum(axis=1) # get totals across all field blanks (not sure if she pools these too)
-    field_blank_totals.to_csv(outdir / "fblank_derep_totals.tsv", sep="\t")
-
-    fblank_minus_eblank_totals = field_blank_totals.sub(extr_blank_totals).clip(lower=0) # subtract extraction blank reads from field blank reads
-    fblank_minus_eblank_totals.to_csv(outdir / "fblank_derep_minus_eblank_totals.tsv", sep="\t")
-
-    ftab_derep_df_drop_blanks = ftab_derep_df.drop(extr_blank_sams + field_blank_sams, axis=1) # drop extraction and field blank samples, leaving just dam baseline samples
-    ftab_derep_df_drop_blanks.to_csv(outdir / "dbase_derep_no_blanks.tsv", sep="\t")
-
-    ftab_derep_sub_eblank = ftab_derep_df_drop_blanks.sub(extr_blank_totals, axis=0).clip(lower=0) # subtract extraction blank reads from dam baseline samples
-    ftab_derep_sub_eblank.to_csv(outdir / "dbase_derep_minus_eblank.tsv", sep="\t")
-
-    ftab_derep_sub_eblank_fblank = ftab_derep_sub_eblank.sub(fblank_minus_eblank_totals, axis=0).clip(lower=0) # then, subtract field blank reads
-    ftab_derep_sub_eblank_fblank_out = outdir / "dbase_derep_minus_eblank_fblank.tsv"
-    ftab_derep_sub_eblank_fblank.to_csv(ftab_derep_sub_eblank_fblank_out, sep="\t")
-
-    logger.info("DONE with decontamination")
-    logger.info(f"Wrote out intermediate feat tabs. Find them in {outdir}")
-    logger.info(f"Wrote out decontaminated feat tab to {ftab_derep_sub_eblank_fblank_out}")
-
-    return ftab_derep_sub_eblank_fblank
-
 def main():
     config = load_config("config.ini")
     args = get_args(config)
@@ -711,114 +648,106 @@ def main():
     threads = args.threads
     logger.info(f"starting pipeline with {threads} threads")
 
-    if not args.mapped_feat_tab:
-        crabs_ref_tax = Path(args.crabs_database_tax).resolve()
-        crabs_ref_seq = Path(args.crabs_database_seq).resolve()
-        if not crabs_ref_tax.is_file():
-            logger.error(f"database file {crabs_ref_tax} not found")
+    crabs_ref_tax = Path(args.crabs_database_tax).resolve()
+    crabs_ref_seq = Path(args.crabs_database_seq).resolve()
+    if not crabs_ref_tax.is_file():
+        logger.error(f"database file {crabs_ref_tax} not found")
+        sys.exit(1)
+    if not crabs_ref_seq.is_file():
+        logger.error(f"database file {crabs_ref_seq} not found")
+        sys.exit(1)
+    logger.info("loaded crabs reference db files")
+    logger.info(f"tax ref: {crabs_ref_tax}")
+    logger.info(f"seq ref: {crabs_ref_seq}")
+
+    blast_ref_tax = Path(args.blast_database_tax).resolve()
+    blast_ref_seq = Path(args.blast_database_seq).resolve()
+    if not blast_ref_tax.is_file():
+        logger.error(f"database file {blast_ref_tax} not found")
+        sys.exit(1)
+    if not blast_ref_seq.is_file():
+        logger.error(f"database file {blast_ref_seq} not found")
+        sys.exit(1)
+    logger.info("loaded blast reference db files")
+    logger.info(f"tax ref: {blast_ref_tax}")
+    logger.info(f"seq ref: {blast_ref_seq}")
+
+    if not args.archive: # only import reads if archive not supplied (this takes a while)
+        reads_archive = Path(outdir / "reads.qza").resolve()
+        if not args.manifest:
+            print("please supply manifest file using the --manifest option")
+            logger.error("no manifest file supplied")
             sys.exit(1)
-        if not crabs_ref_seq.is_file():
-            logger.error(f"database file {crabs_ref_seq} not found")
+        manifest = Path(args.manifest).resolve() # only load manifest if there's no archive supplied
+        if not manifest.is_file():
+            logger.error(f"cannot access manifest {manifest}. file does not exist.")
             sys.exit(1)
-        logger.info("loaded crabs reference db files")
-        logger.info(f"tax ref: {crabs_ref_tax}")
-        logger.info(f"seq ref: {crabs_ref_seq}")
-
-        blast_ref_tax = Path(args.blast_database_tax).resolve()
-        blast_ref_seq = Path(args.blast_database_seq).resolve()
-        if not blast_ref_tax.is_file():
-            logger.error(f"database file {blast_ref_tax} not found")
-            sys.exit(1)
-        if not blast_ref_seq.is_file():
-            logger.error(f"database file {blast_ref_seq} not found")
-            sys.exit(1)
-        logger.info("loaded blast reference db files")
-        logger.info(f"tax ref: {blast_ref_tax}")
-        logger.info(f"seq ref: {blast_ref_seq}")
-
-        if not args.archive: # only import reads if archive not supplied (this takes a while)
-            reads_archive = Path(outdir / "reads.qza").resolve()
-            if not args.manifest:
-                print("please supply manifest file using the --manifest option")
-                logger.error("no manifest file supplied")
-                sys.exit(1)
-            manifest = Path(args.manifest).resolve() # only load manifest if there's no archive supplied
-            if not manifest.is_file():
-                logger.error(f"cannot access manifest {manifest}. file does not exist.")
-                sys.exit(1)
-            logger.info(f"loaded manifest: {manifest}")
-            import_reads(logger, manifest, reads_archive)
-        else:
-            logger.info("skipping import and using archive file instead")
-            reads_archive = Path(args.archive).resolve() # get archive path
-        logger.info(f"loaded archive: {reads_archive}")
-
-        primers = args.forward_primer, args.reverse_primer
-        trim_dir = outdir / "trimmed_reads" # store trimmed read file here
-        trim_dir.mkdir()
-        trimmed_reads = trim_reads(logger, primers, reads_archive, threads, trim_dir)
-
-        dada_params = { # dada2 parameters from command line arguments
-            "trim_forward": args.trim_forward,
-            "trim_reverse": args.trim_reverse,
-            "trunc_forward": args.trunc_forward,
-            "trunc_reverse": args.trunc_reverse,
-            "threads": threads
-        }
-        dada_dir = outdir / "dada2" # store deniosing files here
-        dada_dir.mkdir()
-        asv_seqs, feat_table = denoise_reads(logger, trimmed_reads, dada_params, dada_dir)
-
-        vsearch_dir = outdir / "vsearch"
-        vsearch_dir.mkdir()
-        vsearch_out = run_vsearch(logger, asv_seqs, crabs_ref_tax, crabs_ref_seq, threads, vsearch_dir)
-
-        species_level = 7 # looking for exact matches all the way to species level
-        vsearch_unassigned_tax, vsearch_retained_tax = parse_output(logger, vsearch_out, vsearch_dir, species_level)
-        vsearch_unassigned_seq_archive, vsearch_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, vsearch_unassigned_tax, vsearch_dir)
-
-        bayes_dir = outdir / "bayes"
-        bayes_dir.mkdir()
-        bayes_out = run_nb_classifier(logger, vsearch_unassigned_seq_archive, crabs_ref_tax, crabs_ref_seq, threads, bayes_dir)
-
-        family_level = 5 # looking only above family level
-        bayes_unassigned_tax, bayes_retained_tax = parse_output(logger, bayes_out, bayes_dir, family_level)
-        bayes_unassigned_seq_archive, bayes_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, bayes_unassigned_tax, bayes_dir)
-
-        blast_params = { # blast parameters from command line arguments
-            "perc_identity": args.perc_identity,
-            "query_cov": args.query_cov,
-            "max_accepts": args.max_accepts,
-            "threads": threads
-        }
-        blast_dir = outdir / "blast"
-        blast_dir.mkdir()
-        blast_out = run_blast(logger, bayes_unassigned_seq_archive, blast_ref_tax, blast_ref_seq, blast_params, blast_dir)
-
-        if blast_out.is_file(): # only run these if blast completes successfully
-            blast_unassigned_tax, blast_retained_tax = parse_output(logger, blast_out, blast_dir, family_level)
-            blast_unassigned_seq_archive, blast_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, blast_unassigned_tax, bayes_dir)
-        else:
-            blast_retained_tax = None
-            blast_unassigned_seq_fasta = None
-
-        tax_files = [
-            vsearch_retained_tax,
-            bayes_retained_tax,
-            blast_retained_tax
-        ]
-
-        mapping_dir = outdir / "mapping_files"
-        mapping_dir.mkdir()
-        final_tax_tsv = stitch_tax_files(logger, tax_files, mapping_dir)
-        feat_tab_mapped = map_tax_to_feat_table(logger, feat_table, final_tax_tsv, mapping_dir)
-
+        logger.info(f"loaded manifest: {manifest}")
+        import_reads(logger, manifest, reads_archive)
     else:
-        feat_tab_mapped = args.mapped_feat_tab
+        logger.info("skipping import and using archive file instead")
+        reads_archive = Path(args.archive).resolve() # get archive path
+    logger.info(f"loaded archive: {reads_archive}")
 
-    decontam_dir = outdir / "decontam_files"
-    decontam_dir.mkdir()
-    feat_tab_decontamed = decontam(logger, feat_tab_mapped, decontam_dir)
+    primers = args.forward_primer, args.reverse_primer
+    trim_dir = outdir / "trimmed_reads" # store trimmed read file here
+    trim_dir.mkdir()
+    trimmed_reads = trim_reads(logger, primers, reads_archive, threads, trim_dir)
+
+    dada_params = { # dada2 parameters from command line arguments
+        "trim_forward": args.trim_forward,
+        "trim_reverse": args.trim_reverse,
+        "trunc_forward": args.trunc_forward,
+        "trunc_reverse": args.trunc_reverse,
+        "threads": threads
+    }
+    dada_dir = outdir / "dada2" # store deniosing files here
+    dada_dir.mkdir()
+    asv_seqs, feat_table = denoise_reads(logger, trimmed_reads, dada_params, dada_dir)
+
+    vsearch_dir = outdir / "vsearch"
+    vsearch_dir.mkdir()
+    vsearch_out = run_vsearch(logger, asv_seqs, crabs_ref_tax, crabs_ref_seq, threads, vsearch_dir)
+
+    species_level = 7 # looking for exact matches all the way to species level
+    vsearch_unassigned_tax, vsearch_retained_tax = parse_output(logger, vsearch_out, vsearch_dir, species_level)
+    vsearch_unassigned_seq_archive, vsearch_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, vsearch_unassigned_tax, vsearch_dir)
+
+    bayes_dir = outdir / "bayes"
+    bayes_dir.mkdir()
+    bayes_out = run_nb_classifier(logger, vsearch_unassigned_seq_archive, crabs_ref_tax, crabs_ref_seq, threads, bayes_dir)
+
+    family_level = 5 # looking only above family level
+    bayes_unassigned_tax, bayes_retained_tax = parse_output(logger, bayes_out, bayes_dir, family_level)
+    bayes_unassigned_seq_archive, bayes_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, bayes_unassigned_tax, bayes_dir)
+
+    blast_params = { # blast parameters from command line arguments
+        "perc_identity": args.perc_identity,
+        "query_cov": args.query_cov,
+        "max_accepts": args.max_accepts,
+        "threads": threads
+    }
+    blast_dir = outdir / "blast"
+    blast_dir.mkdir()
+    blast_out = run_blast(logger, bayes_unassigned_seq_archive, blast_ref_tax, blast_ref_seq, blast_params, blast_dir)
+
+    if blast_out.is_file(): # only run these if blast completes successfully
+        blast_unassigned_tax, blast_retained_tax = parse_output(logger, blast_out, blast_dir, family_level)
+        blast_unassigned_seq_archive, blast_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, blast_unassigned_tax, bayes_dir)
+    else:
+        blast_retained_tax = None
+        blast_unassigned_seq_fasta = None
+
+    tax_files = [
+        vsearch_retained_tax,
+        bayes_retained_tax,
+        blast_retained_tax
+    ]
+
+    mapping_dir = outdir / "mapping_files"
+    mapping_dir.mkdir()
+    final_tax_tsv = stitch_tax_files(logger, tax_files, mapping_dir)
+    feat_tab_mapped = map_tax_to_feat_table(logger, feat_table, final_tax_tsv, mapping_dir)
 
     logger.info("pipeline end")
 
