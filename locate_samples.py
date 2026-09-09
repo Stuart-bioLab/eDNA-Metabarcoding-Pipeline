@@ -116,7 +116,7 @@ def group_by_field_blank(df, meta_df, study, outdir):
     df_groupby_date = df.groupby("Date Collected")["Sample ID"].apply(list) # attribute a list of samples collected to each date
     date_dict = df_groupby_date.to_dict() # convert to a dict where timestamp: [samples collected]
 
-    outfile = outdir / "field_blank_map.tsv"
+    outfile = outdir / f"{study}_field_blank_map.tsv"
     with open(outfile, "w") as f:
         f.write(f"sample-id\t{study}-field-blank-id\tdate-collected\n")
         written_ids = []
