@@ -252,8 +252,16 @@ def main():
     blank_map = "all_sample_metadata.xlsx"
 
     studies = ["DamBaseline", "JuneJulyTemporal", "EbonyTemporal", "Filter_5.0v0.45"]
-    if study == "Filter":
+
+    if study == "d":
+        study = "DamBaseline"
+    if study == "j":
+        study = "JuneJulyTemporal"
+    if study == "e":
+        study = "EbonyTemporal"
+    if study == "f":
         study = "Filter_5.0v0.45"
+
     if study not in studies:
         print("Possible studies include", end=" ")
         print(", ".join(studies))
