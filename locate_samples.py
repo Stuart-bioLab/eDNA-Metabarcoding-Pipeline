@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 from collections import defaultdict
 import shutil
+import numpy as np
 
 def get_args():
     """Parse command line arguments."""
@@ -14,7 +15,6 @@ def get_args():
     parser.add_argument("-d", "--data", help="Path to dir containing sequence read files.")
     parser.add_argument("-s", "--study", help="Target study to subset reads for.")
     parser.add_argument("-f", "--file", help="Provide tsv mapping read prefix to filepath.")
-    parser.add_argument("-a", "--add_reads", help="Comma delimited list of prefixes to also add to manifest. Add these after manually finding typos etc.")
     args = parser.parse_args()
     return args
 
@@ -28,8 +28,9 @@ def subset_metadata(metadata, study, outdir):
     meta_subset_df.to_csv(outdir / "subset_metadata.tsv", sep="\t", index=False) # write out maybe i'll want to look at this idk
 
     sam_ids = list(meta_subset_df["Sample ID"]) # get list of sample names from study
+    no_nan_sam_ids = [x for x in sam_ids if x is not np.nan]
 
-    return meta_df, meta_subset_df, sam_ids
+    return meta_df, meta_subset_df, no_nan_sam_ids
 
 def find_read_files(data, outdir):
     """Search input dir for fastq files. Write out each read file paired with its prefix."""
@@ -117,47 +118,32 @@ def group_by_field_blank(df, meta_df, study, outdir):
 
     outfile = outdir / "field_blank_map.tsv"
     with open(outfile, "w") as f:
-        f.write(f"sample-id\t{study}-field-blank\tother-field-blank\tdate-collected\n")
-        non_study_fbs = []
+        f.write(f"sample-id\t{study}-field-blank-id\tdate-collected\n")
+        written_ids = []
         for k, v in date_dict.items():
-            study_fb = None # if field blank is on current study
-            other_fb = None # if field blank is on a different study
-            study_fb = [x for x in v if "FB" in x]
-            if not study_fb: # if field blank is not in target study subset (was collected on same day with other study)
-                all_samples_that_day = meta_df[meta_df["Date Collected"] == k]["Sample ID"] # look at all samples collected on target date
-                other_fb = [x for x in all_samples_that_day if "FB" in x] # isolate the field blank
-                for fb in other_fb: # add field blank even if its not on study
-                    non_study_fbs.append(fb)
+            no_nan_sams = [x for x in v if x is not np.nan]
+            fb = [x for x in no_nan_sams if "FB" in x]
+            if not fb: # if field blank is not in DamBaseline subset
+                all_samples_that_day = meta_df[meta_df["Date Collected"] == k]["Sample ID"].dropna() # look at all samples collected on target date
+                fb = [x for x in all_samples_that_day if "FB" in x] # isolate the field blank
             date_collected = f"{k.month}/{k.day}/{k.year}" # reformat date
-            study_fb = "NA" if not study_fb else "".join(study_fb)
-            other_fb = "NA" if not other_fb else "".join(other_fb)
-            for sam_id in v:
-                f.write(f"{sam_id}\t{study_fb}\t{other_fb}\t{date_collected}\n")
-    
-    if not non_study_fbs:
-        non_study_fbs = None
+            for sam_id in no_nan_sams:
+                if len(fb) > 1:
+                    for fblank in fb:
+                        if sam_id[-2:] == fblank[-2:]:
+                            single_field_blank = fblank
+                else:
+                    single_field_blank = "".join(fb) if fb else "Not sequenced"
+                if sam_id is not single_field_blank:
+                    if sam_id not in written_ids:
+                        f.write(f"{sam_id}\t{single_field_blank}\t{date_collected}\n")
+                        written_ids.append(sam_id)
 
-    return outfile, non_study_fbs
+    return outfile
 
-def get_read_file_prefixes(infile):
-    """Get all unique filepath prefixes that correspond to metadata entries."""
-    read_prefix_list = []
-    with open(infile, "r") as f:
-        f.readline()
-        for line in f.readlines():
-            read_files = line.split("\t")[1].split(";")
-            for r in read_files:
-                r = r.strip()
-                if not r: # if there's no entry
-                    continue
-                if r not in read_prefix_list:
-                    read_prefix_list.append(r)
-
-    return read_prefix_list
-
-def get_filepaths(prefix_list, in_file):
+def get_filepaths(study_ids, infile):
     """Create dict that groups all read filepaths with their corresponding fastq prefix."""
-    with open(in_file, "r") as f:
+    with open(infile, "r") as f:
         f.readline()
         lines = f.readlines()
 
@@ -166,19 +152,14 @@ def get_filepaths(prefix_list, in_file):
         prefix, filepath = l.split("\t")
         if "mussel" in filepath: # not looking at mussel sams right now
             continue
-        if prefix in prefix_list:
+        if prefix in study_ids:
             filepath_dict[prefix].append(filepath.strip())
 
     return filepath_dict
 
-def write_sample_manifest(sample_read_map, reads_list, study, other_reads, outdir):
+def write_sample_manifest(study_ids, reads_list, study, outdir):
     """Generate manifest file containing read filepaths for all available samples in target study"""
-    read_prefix_list = get_read_file_prefixes(sample_read_map)
-    if other_reads:
-        for r in other_reads: # add manually input reads
-            if r not in read_prefix_list:
-                read_prefix_list.append(r)
-    filepath_dict = get_filepaths(read_prefix_list, reads_list)
+    filepath_dict = get_filepaths(study_ids, reads_list)
 
     outfile = outdir / f"{study}_manifest.tsv"
     seen_rep_ids = [] # store replicate ids here so we don't enter duplicates into the manifest
@@ -267,9 +248,8 @@ def main():
     data = args.data
     reads_list = args.file
     study = args.study
-    metadata = "FReDNA_master_metadata.xlsx"
+    metadata = "LIVE_FoxRiver_eDNA_Field_Data_Clean.xlsx"
     blank_map = "all_sample_metadata.xlsx"
-    input_reads = args.add_reads
 
     studies = ["DamBaseline", "JuneJulyTemporal", "EbonyTemporal", "Filter_5.0v0.45"]
     if study == "Filter":
@@ -290,18 +270,9 @@ def main():
             print("Supply path to data dir.")
             sys.exit(1)
     
-    sample_read_map = match_sample_ids(reads_list, study_ids, outdir)
-    field_blank_map, non_study_fbs = group_by_field_blank(meta_study_df, full_meta_df, study, outdir)
+    field_blank_map = group_by_field_blank(meta_study_df, full_meta_df, study, outdir)
 
-    if non_study_fbs: # add field blanks that are not on target study to manifest so they can also be processed (if files exist)
-        if not input_reads: # if there are no other prefixes given at command line
-            other_reads = non_study_fbs
-        else: # otherwise, search for other field blanks if files exist
-            other_reads = input_reads.split(",")
-            for fb in non_study_fbs: # set field blanks up to be added to manifest if they are non on target study
-                other_reads.append(fb)
-
-    study_manif = write_sample_manifest(sample_read_map, reads_list, study, other_reads, outdir)
+    study_manif = write_sample_manifest(study_ids, reads_list, study, outdir)
     append_extraction_blanks(study_manif, blank_map, reads_list, study, outdir)
 
 if __name__ == "__main__":
