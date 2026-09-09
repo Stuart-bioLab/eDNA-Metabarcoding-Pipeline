@@ -25,7 +25,7 @@ def subset_metadata(metadata, study, outdir):
     meta_df.drop(unnamed_cols, axis=1, inplace=True) # drop unnamed cols
 
     meta_subset_df = meta_df[~meta_df[study].isna()] # subset dataframe for samples in target study
-    meta_subset_df.to_csv(outdir / "subset_metadata.tsv", sep="\t", index=False) # write out maybe i'll want to look at this idk
+    meta_subset_df.to_csv(outdir / f"{study}_subset_metadata.tsv", sep="\t", index=False) # write out maybe i'll want to look at this idk
 
     sam_ids = list(meta_subset_df["Sample ID"]) # get list of sample names from study
     no_nan_sam_ids = [x for x in sam_ids if x is not np.nan]
@@ -49,67 +49,7 @@ def find_read_files(data, outdir):
             prefix_no_rep = re.sub("-rep.*", "", prefix) # remove replicate number from prefix so its easier to match with metadata
             f.write(f"{prefix_no_rep}\t{str(p)}\n") # write prefix and filepath
     
-    return outfile
-
-def parse_reads_list(infile):
-    """Read in all unique read path prefixes."""
-    with open(infile, "r") as f:
-        f.readline()
-        prefix_list = []
-        for line in f.readlines():
-            sam_prefix = line.split("\t")[0]
-            if sam_prefix not in prefix_list:
-                prefix_list.append(sam_prefix)
-    
-    return prefix_list
-
-def write_out_dict(sam_dict, dupes_list, outdir):
-    """Write out map to facilitate manual disambiguation. Also, used next to grab all possible read files for manifest."""
-    dict_out = outdir / "sample_id_best_matches.tsv"
-    with open(dict_out, "w") as f:
-        f.write("sample-id\tpossible-read-files\tno-read-file-found\n")
-        for k, v in sam_dict.items():
-            candidate_read_files = ";".join(v)
-            if candidate_read_files == "NA":
-                f.write(f"{k}\t\t{candidate_read_files}\n")
-            else:
-                f.write(f"{k}\t{candidate_read_files}\n")
-
-    dupes_out = outdir / "sample_dupes.txt"
-    with open(dupes_out, "w") as f:
-        for d in dupes_list:
-            f.write(f"{d}\n")
-
-    return dict_out
-
-def match_sample_ids(infile, meta_sam_ids, outdir):
-    """Match sequence read prefix with sample names. If samples do not have the same name, find the next best match."""
-    read_prefixes = parse_reads_list(infile)
-    
-    sample_id_map = defaultdict(list)
-    duplicates = [] # store dupes here
-    for s in meta_sam_ids: # iterate over samples in the metadata
-        if s not in sample_id_map.keys(): # i.e., if this is not a duplicate
-            if s in read_prefixes: # if there is a 1-to-1 map from metadata to read files
-                sample_id_map[s].append(s) # the names are identical
-            elif s[:-1] in read_prefixes: # check if samples were pooled, e.g. NAD-DNL1 and NAD-DNL2 pooled as NAD-DNL
-                sample_id_map[s].append(s[:-1])
-            else: # otherwise, find close file names
-                pattern = rf"{s[:-1]}.*" # check for typos
-                for p in read_prefixes:
-                    if re.match(pattern, p):
-                        sample_id_map[s].append(p)
-            for p in read_prefixes: # also check for possible duplicates
-                pattern = rf"{s}D" # duplicates have the same file name but with a D appended
-                if re.match(pattern, p):
-                    sample_id_map[s].append(p)
-        else:
-            duplicates.append(s)
-        if s not in sample_id_map.keys():
-            sample_id_map[s].append("NA")
-
-    sample_read_map = write_out_dict(sample_id_map, duplicates, outdir)
-    return sample_read_map    
+    return outfile  
 
 def group_by_field_blank(df, meta_df, study, outdir):
     """Write out file showing which field blank each sample was collected with."""
@@ -192,14 +132,14 @@ def read_replicate_ids(infile):
 
     return replicate_id_list
 
-def build_extraction_map(infile, id_list, outdir):
+def build_extraction_map(infile, id_list, study, outdir):
     """Write file mapping each sample to its extraction blank."""
     df = pd.read_excel(infile)
     target_samples = df["Sample ID"].isin(id_list) # only get samples from the target study
     subset_df = df[target_samples]
     extr_blank_map_df = subset_df[["Sample ID", "Extraction Negative"]] # just want sample ID and its eblank
 
-    outfile = outdir / "extraction_blank_map.tsv"
+    outfile = outdir / f"{study}_extraction_blank_map.tsv"
     extr_blank_map_df.to_csv(outfile, index=False, sep="\t")
 
     extr_blank_rep_ids = list( # get a list of extraction blanks
@@ -218,7 +158,7 @@ def build_extraction_map(infile, id_list, outdir):
 def append_extraction_blanks(input_manif, eblank_metadata, reads_list, study, outdir):
     """Append extraction blanks to manifest so they can be run alongside regular samples."""
     rep_id_list = read_replicate_ids(input_manif)
-    sam_list = build_extraction_map(eblank_metadata, rep_id_list, outdir)
+    sam_list = build_extraction_map(eblank_metadata, rep_id_list, study, outdir)
 
     with open(reads_list, "r") as f:
         f.readline()
@@ -278,7 +218,7 @@ def main():
             print("Supply path to data dir.")
             sys.exit(1)
     
-    field_blank_map = group_by_field_blank(meta_study_df, full_meta_df, study, outdir)
+    group_by_field_blank(meta_study_df, full_meta_df, study, outdir)
 
     study_manif = write_sample_manifest(study_ids, reads_list, study, outdir)
     append_extraction_blanks(study_manif, blank_map, reads_list, study, outdir)
