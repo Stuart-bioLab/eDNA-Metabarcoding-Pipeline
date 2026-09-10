@@ -73,11 +73,12 @@ def group_by_field_blank(df, meta_df, study, outdir):
                         if sam_id[-2:] == fblank[-2:]:
                             single_field_blank = fblank
                 else:
-                    single_field_blank = "".join(fb) if fb else "Not sequenced"
-                if sam_id is not single_field_blank:
-                    if sam_id not in written_ids:
-                        f.write(f"{sam_id}\t{single_field_blank}\t{date_collected}\n")
-                        written_ids.append(sam_id)
+                    single_field_blank = "".join(fb) if fb else "NA" # if the field blank hasn't been sequenced yet
+                if sam_id not in written_ids:
+                    if sam_id == single_field_blank:
+                        single_field_blank = "NA"
+                    f.write(f"{sam_id}\t{single_field_blank}\t{date_collected}\n")
+                    written_ids.append(sam_id)
 
     return outfile
 
@@ -140,7 +141,7 @@ def build_extraction_map(infile, id_list, study, outdir):
     extr_blank_map_df = subset_df[["Sample ID", "Extraction Negative"]] # just want sample ID and its eblank
 
     outfile = outdir / f"{study}_extraction_blank_map.tsv"
-    extr_blank_map_df.to_csv(outfile, index=False, sep="\t")
+    extr_blank_map_df.fillna("NA").to_csv(outfile, index=False, sep="\t")
 
     extr_blank_rep_ids = list( # get a list of extraction blanks
         extr_blank_map_df["Extraction Negative"] # subset for just blank replicate ids
@@ -185,8 +186,26 @@ def append_extraction_blanks(input_manif, eblank_metadata, reads_list, study, ou
 
     return eblank_map
 
-def build_replicate_metadata():
-    pass
+def build_replicate_metadata(fb_file, eb_file, study, outdir):
+    """Compine extraction blank and field blank maps into one metadata file."""
+    fblank_dict = {}
+    with open(fb_file, "r") as f:
+        f.readline()
+        for line in f.readlines():
+            sam_id, fb, date = line.strip().split("\t")
+            fblank_dict[sam_id] = {"fb": fb, "date": date}
+
+    outfile = outdir / f"final_{study}_replicate_metadata.tsv"
+    with open(outfile, "w") as o:
+        o.write("replicate-id\tsample-id\textraction-blank\tfield-blank\tdate-collected\n")
+        with open(eb_file, "r") as e:
+            e.readline()
+            for line in e.readlines():
+                rep_id, eb = line.strip().split("\t")
+                sam_id = re.sub("-rep.*$", "", rep_id)
+                fb = fblank_dict[sam_id]["fb"]
+                date = fblank_dict[sam_id]["date"]
+                o.write(f"{rep_id}\t{sam_id}\t{eb}\t{fb}\t{date}\n")
 
 def main():
     args = get_args()
@@ -228,7 +247,7 @@ def main():
     study_manif = write_sample_manifest(study_ids, reads_list, study, outdir)
     eblank_map_file = append_extraction_blanks(study_manif, blank_map, reads_list, study, outdir)
 
-    build_replicate_metadata(fblank_map_file, eblank_map_file)
+    build_replicate_metadata(fblank_map_file, eblank_map_file, study, outdir)
 
 if __name__ == "__main__":
     main()
