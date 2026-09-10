@@ -803,6 +803,7 @@ def main():
     if not blank_metadata.is_file():
         logger.error(f"metadata {blank_metadata} not found")
         sys.exit(1)
+    logger.info(f"loaded blank metadata: {blank_metadata}")
 
     if not args.archive: # only import reads if archive not supplied (this takes a while)
         reads_archive = Path(outdir / "reads.qza").resolve()
