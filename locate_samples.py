@@ -133,7 +133,7 @@ def read_replicate_ids(infile):
     return replicate_id_list
 
 def build_extraction_map(infile, id_list, study, outdir):
-    """Write file mapping each sample to its extraction blank."""
+    """Write file mapping each sample to its extraction blank. Then, build map from sample id to eblank id for building manifest."""
     df = pd.read_excel(infile)
     target_samples = df["Sample ID"].isin(id_list) # only get samples from the target study
     subset_df = df[target_samples]
@@ -149,16 +149,16 @@ def build_extraction_map(infile, id_list, study, outdir):
 
     eblank_sam_ids = []
     for rep_id in extr_blank_rep_ids:
-        sam_id = re.sub("-rep.*$", "", rep_id)
+        sam_id = re.sub("-rep.*$", "", rep_id) # drop replicate number
         if sam_id not in eblank_sam_ids:
             eblank_sam_ids.append(sam_id)
 
-    return eblank_sam_ids
+    return eblank_sam_ids, outfile
 
 def append_extraction_blanks(input_manif, eblank_metadata, reads_list, study, outdir):
     """Append extraction blanks to manifest so they can be run alongside regular samples."""
     rep_id_list = read_replicate_ids(input_manif)
-    sam_list = build_extraction_map(eblank_metadata, rep_id_list, study, outdir)
+    sam_list, eblank_map = build_extraction_map(eblank_metadata, rep_id_list, study, outdir)
 
     with open(reads_list, "r") as f:
         f.readline()
@@ -169,19 +169,24 @@ def append_extraction_blanks(input_manif, eblank_metadata, reads_list, study, ou
 
     seen_rep_ids = [] # store rep ids here just like with samples
     with open(final_manif, "a") as m:
-        for i in range(0, len(lines), 2):
+        for i in range(0, len(lines), 2): # reads are paired
             sam_id, fpath = lines[i].split("\t")
             rpath = lines[i+1].split("\t")[1]
-            if sam_id in sam_list:
+            if sam_id in sam_list: # grab files from target study
                 split_path_name = fpath.split("/")[-1].split("_")
-                rep_id = split_path_name[1] if split_path_name[0].startswith("SP") else split_path_name[0]
-                if "mussel" in rep_id:
+                rep_id = split_path_name[1] if split_path_name[0].startswith("SP") else split_path_name[0] # get prefix from filepath (accounting for NWern sams that have SP- in front)
+                if "mussel" in rep_id: # not looking a mussel sams right now
                     continue
-                fpath = fpath.replace("/mnt/d/", "/mnt/g/")
+                fpath = fpath.replace("/mnt/d/", "/mnt/g/") # data on the PC is stored in G:
                 rpath = rpath.replace("/mnt/d/", "/mnt/g/")
-                if rep_id not in seen_rep_ids:
+                if rep_id not in seen_rep_ids: # don't repeat replicates
                     m.write(f"{rep_id}\t{fpath}\t{rpath}\n")
                     seen_rep_ids.append(rep_id)
+
+    return eblank_map
+
+def build_replicate_metadata():
+    pass
 
 def main():
     args = get_args()
@@ -218,10 +223,12 @@ def main():
             print("Supply path to data dir.")
             sys.exit(1)
     
-    group_by_field_blank(meta_study_df, full_meta_df, study, outdir)
+    fblank_map_file = group_by_field_blank(meta_study_df, full_meta_df, study, outdir)
 
     study_manif = write_sample_manifest(study_ids, reads_list, study, outdir)
-    append_extraction_blanks(study_manif, blank_map, reads_list, study, outdir)
+    eblank_map_file = append_extraction_blanks(study_manif, blank_map, reads_list, study, outdir)
+
+    build_replicate_metadata(fblank_map_file, eblank_map_file)
 
 if __name__ == "__main__":
     main()
