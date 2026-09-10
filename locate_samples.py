@@ -140,19 +140,23 @@ def build_extraction_map(infile, id_list, study, outdir):
     subset_df = df[target_samples]
     extr_blank_map_df = subset_df[["Sample ID", "Extraction Negative"]] # just want sample ID and its eblank
 
+    tmpfile = outdir / "tmp_eblank_file.tsv"
+    extr_blank_map_df.fillna("NA").to_csv(tmpfile, sep="\t", index=False, header=["replicate-id", "extraction-blank-replicate-id"])
+
     outfile = outdir / f"{study}_extraction_blank_map.tsv"
-    extr_blank_map_df.fillna("NA").to_csv(outfile, index=False, sep="\t")
-
-    extr_blank_rep_ids = list( # get a list of extraction blanks
-        extr_blank_map_df["Extraction Negative"] # subset for just blank replicate ids
-        .dropna() # get rid of blank entries
-    )
-
-    eblank_sam_ids = []
-    for rep_id in extr_blank_rep_ids:
-        sam_id = re.sub("-rep.*$", "", rep_id) # drop replicate number
-        if sam_id not in eblank_sam_ids:
-            eblank_sam_ids.append(sam_id)
+    written_sam_ids = [] # store visited sample ids here
+    eblank_sam_ids = [] # store unique eblank ids here for manifest appending
+    with open(outfile, "w") as f:
+        f.write("sample-id\teblank-id\n")
+        with open(tmpfile, "r") as t:
+            t.readline()
+            for line in t.readlines():
+                sam_id, eb = [re.sub("-rep.*$", "", x) for x in line.strip().split("\t")] # unpack and remove replicate number
+                if eb not in eblank_sam_ids:
+                    eblank_sam_ids.append(eb)
+                if sam_id not in written_sam_ids: # don't repeat sample ids
+                    f.write(f"{sam_id}\t{eb}\n")
+                    written_sam_ids.append(sam_id)
 
     return eblank_sam_ids, outfile
 
@@ -192,20 +196,18 @@ def build_replicate_metadata(fb_file, eb_file, study, outdir):
     with open(fb_file, "r") as f:
         f.readline()
         for line in f.readlines():
-            sam_id, fb, date = line.strip().split("\t")
-            fblank_dict[sam_id] = {"fb": fb, "date": date}
+            sam_id, fb = line.strip().split("\t")[:2] # not interested in date really
+            fblank_dict[sam_id] = fb
 
     outfile = outdir / f"final_{study}_replicate_metadata.tsv"
     with open(outfile, "w") as o:
-        o.write("replicate-id\tsample-id\textraction-blank\tfield-blank\tdate-collected\n")
+        o.write("sample-id\textraction-blank-id\tfield-blank-id\n")
         with open(eb_file, "r") as e:
             e.readline()
             for line in e.readlines():
-                rep_id, eb = line.strip().split("\t")
-                sam_id = re.sub("-rep.*$", "", rep_id)
-                fb = fblank_dict[sam_id]["fb"]
-                date = fblank_dict[sam_id]["date"]
-                o.write(f"{rep_id}\t{sam_id}\t{eb}\t{fb}\t{date}\n")
+                sam_id, eb = line.strip().split("\t")
+                fb = fblank_dict[sam_id]
+                o.write(f"{sam_id}\t{eb}\t{fb}\n")
 
 def main():
     args = get_args()
