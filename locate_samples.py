@@ -199,7 +199,7 @@ def build_replicate_metadata(fb_file, eb_file, study, outdir):
             sam_id, fb = line.strip().split("\t")[:2] # not interested in date really
             fblank_dict[sam_id] = fb
 
-    outfile = outdir / f"final_{study}_replicate_metadata.tsv"
+    outfile = outdir / f"final_{study}_blank_metadata.tsv"
     with open(outfile, "w") as o:
         o.write("sample-id\textraction-blank-id\tfield-blank-id\n")
         with open(eb_file, "r") as e:
