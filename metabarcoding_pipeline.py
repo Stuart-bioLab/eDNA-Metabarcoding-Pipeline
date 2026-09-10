@@ -118,6 +118,17 @@ def get_args(config):
         help="maximum number of hits to keep for blast query"
     )
 
+    parser.add_argument(
+        "--blank_metadata",
+        default=None,
+        help="map pairing samples with respective field and extraction blanks"
+    )
+
+    parser.add_argument( # FOR DEVELOPMENT
+        "--decontam",
+        action="store_true"
+    )
+
     return parser.parse_args()
 
 def create_outdir(base):
@@ -423,7 +434,7 @@ def filter_seqs(logger, asv_seqs, unassigned, outdir):
         sys.exit(1)
     logger.info(f"DONE importing filtered {prefix} seqs")
 
-    return asv_out, unassigned_fasta
+    return asv_out
 
 def run_nb_classifier(logger, asv_seqs, train_tax, train_seq, threads, outdir):
     """Train and run the naive Bayes classifier on sequences vsearch did not have exact matches for."""
@@ -637,7 +648,119 @@ def map_tax_to_feat_table(logger, feat_table, final_tax_tsv, outdir):
     feat_tab_unique.to_csv(feat_tab_unique_out_tsv, sep="\t")
     logger.info(f"wrote feat table with counts summed across taxa to {feat_tab_unique_out_tsv}")
 
-    return feat_tab_unique
+    return feat_tab_unique_out_tsv
+
+def build_blank_mapping_dicts(blank_map):
+    """Read metadata and pair sample replicates with extraction blank replicates. Return as a dict."""
+    eblank_dict = defaultdict(list)
+    fblank_dict = defaultdict(list)
+    with open(blank_map) as f:
+        f.readline() # ignore header
+        for line in f.readlines():
+            sam_id, eb, fb = line.strip().split("\t") # unpack values from metadata
+            if sam_id not in eblank_dict[eb]:
+                eblank_dict[eb].append(sam_id)
+            if sam_id not in fblank_dict[fb]:
+                fblank_dict[fb].append(sam_id)
+
+    return eblank_dict, fblank_dict
+
+def sum_replicates(feat_tab):
+    """Split input dataframe into samples with replicates and singletons. Sum read counts across replicates. Concatenate and return dereplicated dataframe."""
+    rep_ids = feat_tab.columns
+    replicated_sams = rep_ids[rep_ids.str.contains("rep")] # pull out which samples have replicates
+    feat_tab_reps = feat_tab[replicated_sams] # get samples with replicates
+    feat_tab_non_reps = feat_tab.drop(replicated_sams, axis=1) # get samples without replicates
+
+    sam_ids = defaultdict(list)
+    for rep in feat_tab_reps.columns: # map replicates to sample prefixes
+        sam = rep[:-5]
+        sam_ids[sam].append(rep) # store sample id with list of its replicates
+
+    final_tab_cols = {}
+    for sam, reps in sam_ids.items():
+        summed_reps = feat_tab_reps[reps].sum(axis=1) # sum replicates for current sample
+        final_tab_cols[sam] = summed_reps
+    
+    feat_tab_derep = pd.DataFrame(final_tab_cols)
+    final_tab_df = pd.concat([feat_tab_derep, feat_tab_non_reps], axis=1) # join dereped sampled with singletons
+
+    return final_tab_df
+
+def filter_by_abundance(feat_tab, n):
+    """Drop taxa whose read counts account for less than n% of relative abundance."""
+    sample_totals = feat_tab.sum(axis=0)
+    feat_tab_filt_abun = feat_tab.div(sample_totals, axis=1)
+    taxa_greater_than_n_abun = (feat_tab_filt_abun > n).sum(axis=1) > 0
+    feat_tab_drop_low_abun = feat_tab[taxa_greater_than_n_abun]
+
+    return feat_tab_drop_low_abun
+
+def decontam(logger, feat_tab, blank_metadata, outdir):
+    """Subtract reads from extraction and field blanks."""
+    logger.info("Starting decontamination")
+    ftab_df = pd.read_csv(feat_tab, sep="\t", index_col="Taxon")
+    eblank_dict, fblank_dict = build_blank_mapping_dicts(blank_metadata)
+
+    ftab_derep_df = sum_replicates(ftab_df)
+    ftab_derep_df_out = outdir / "full_derep_ftab.tsv"
+    ftab_derep_df.to_csv(ftab_derep_df_out, sep="\t")
+    logger.info(f"Wrote out summed replicates to {ftab_derep_df_out}")
+
+    ftab_minus_eblank = pd.DataFrame()
+    no_eblank_reps = []
+    for k, v in eblank_dict.items():
+        if k not in ftab_derep_df: # if there's no eblank for the sample, just add counts to the df as-is
+            no_eblank_reps += v
+            subtracted_eblank = ftab_derep_df[v]
+        else:
+            subtracted_eblank = ftab_derep_df[v].sub(ftab_derep_df[k], axis=0) # subtract eblank counts from corresponding sample replicates
+        ftab_minus_eblank = pd.concat([ftab_minus_eblank, subtracted_eblank], axis=1) # add subtracted counts to build new dataframe without ebs and eb counts
+    
+    ftab_eb_clipped = ftab_minus_eblank.clip(lower=0) # set values < 0 to 0
+    ftab_eb_clipped_out = outdir / "ftab_minus_eblank.tsv"
+    ftab_eb_clipped.to_csv(ftab_eb_clipped_out, sep="\t")
+    logger.info(f"Subtracted eblank reads and wrote out to {ftab_eb_clipped_out}")
+
+    just_fblank_sams = pd.DataFrame()
+    for fb in list(fblank_dict.keys()):
+        if fb in ftab_derep_df.columns:
+            just_fblank_sams = pd.concat([just_fblank_sams, ftab_derep_df[fb]], axis=1)
+    just_fblank_sams.index.rename("Taxon", inplace=True)
+    just_fblank_sams_out = outdir / "ftab_just_fblanks.tsv"
+    just_fblank_sams.to_csv(just_fblank_sams_out, sep="\t")
+    logger.info(f"Wrote out just field blank samples to {just_fblank_sams_out}")
+
+    ftab_minus_fblank = pd.DataFrame()
+    no_fblank_sams = []
+    for k, v in fblank_dict.items():
+        if k not in ftab_derep_df:
+            skip_fblanks = [x for x in v if "FB" not in x] # don't add fblanks to final feat tab
+            no_fblank_sams += skip_fblanks
+            subtracted_fblank = ftab_derep_df[skip_fblanks]
+        else:
+            subtracted_fblank = ftab_derep_df[v].sub(ftab_derep_df[k], axis=0)
+        ftab_minus_fblank = pd.concat([ftab_minus_fblank, subtracted_fblank], axis=1)
+
+    ftab_fb_clipped = ftab_minus_fblank.clip(lower=0) # set values < 0 to 0
+    ftab_fb_clipped_out = outdir / "ftab_minus_fblank.tsv"
+    ftab_fb_clipped.to_csv(ftab_fb_clipped_out, sep="\t")
+    logger.info(f"Subtracted fblank reads and wrote out to {ftab_fb_clipped_out}")
+
+    zero_counts = ftab_fb_clipped[ftab_fb_clipped.sum(axis=1) < 1].index # get taxa that now have zero counts across all samples
+    ftab_drop_zeros = ftab_fb_clipped.drop(zero_counts, axis=0) # drop these taxa
+    ftab_drop_zeros_out = outdir / "ftab_no_contams.tsv"
+    ftab_drop_zeros.to_csv(ftab_drop_zeros_out, sep="\t")
+    logger.info(f"Dropped taxa with zero counts and wrote out to {ftab_drop_zeros_out}")
+
+    abun_cutoff_vals = [0.001, 0.005, 0.01, 0.05, 0.1]
+    for n in abun_cutoff_vals:
+        feat_tab_drop_low_abun = filter_by_abundance(ftab_drop_zeros, n)
+        feat_tab_drop_low_abun.to_csv(outdir / f"feat_tab_{n}_abundance.tsv", sep="\t")
+    logger.info(f"Filtered for abundance and wrote out")
+
+    logger.info("DONE with decontamination")
+    return
 
 def main():
     config = load_config("config.ini")
@@ -671,6 +794,15 @@ def main():
     logger.info("loaded blast reference db files")
     logger.info(f"tax ref: {blast_ref_tax}")
     logger.info(f"seq ref: {blast_ref_seq}")
+
+    if not args.blank_metadata:
+        print("please supply metadata file using the --blank_metadata option")
+        logger.error("no blank metadata file supplied")
+        sys.exit(1)
+    blank_metadata = Path(args.blank_metadata).resolve()
+    if not blank_metadata.is_file():
+        logger.error(f"metadata {blank_metadata} not found")
+        sys.exit(1)
 
     if not args.archive: # only import reads if archive not supplied (this takes a while)
         reads_archive = Path(outdir / "reads.qza").resolve()
@@ -711,7 +843,7 @@ def main():
 
     species_level = 7 # looking for exact matches all the way to species level
     vsearch_unassigned_tax, vsearch_retained_tax = parse_output(logger, vsearch_out, vsearch_dir, species_level)
-    vsearch_unassigned_seq_archive, vsearch_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, vsearch_unassigned_tax, vsearch_dir)
+    vsearch_unassigned_seq_archive = filter_seqs(logger, asv_seqs, vsearch_unassigned_tax, vsearch_dir)
 
     bayes_dir = outdir / "bayes"
     bayes_dir.mkdir()
@@ -719,7 +851,7 @@ def main():
 
     family_level = 5 # looking only above family level
     bayes_unassigned_tax, bayes_retained_tax = parse_output(logger, bayes_out, bayes_dir, family_level)
-    bayes_unassigned_seq_archive, bayes_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, bayes_unassigned_tax, bayes_dir)
+    bayes_unassigned_seq_archive = filter_seqs(logger, asv_seqs, bayes_unassigned_tax, bayes_dir)
 
     blast_params = { # blast parameters from command line arguments
         "perc_identity": args.perc_identity,
@@ -733,10 +865,9 @@ def main():
 
     if blast_out.is_file(): # only run these if blast completes successfully
         blast_unassigned_tax, blast_retained_tax = parse_output(logger, blast_out, blast_dir, family_level)
-        blast_unassigned_seq_archive, blast_unassigned_seq_fasta = filter_seqs(logger, asv_seqs, blast_unassigned_tax, bayes_dir)
+        filter_seqs(logger, asv_seqs, blast_unassigned_tax, bayes_dir)
     else:
         blast_retained_tax = None
-        blast_unassigned_seq_fasta = None
 
     tax_files = [
         vsearch_retained_tax,
@@ -748,6 +879,10 @@ def main():
     mapping_dir.mkdir()
     final_tax_tsv = stitch_tax_files(logger, tax_files, mapping_dir)
     feat_tab_mapped = map_tax_to_feat_table(logger, feat_table, final_tax_tsv, mapping_dir)
+
+    decontam_dir = outdir / "decontam"
+    decontam_dir.mkdir()
+    decontam(logger, feat_tab_mapped, blank_metadata, decontam_dir)
 
     logger.info("pipeline end")
 
