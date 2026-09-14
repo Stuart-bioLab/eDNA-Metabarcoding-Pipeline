@@ -1,4 +1,4 @@
-# Collect samples. Generate manifest and blank map.abs
+# Collect samples. Generate manifest and blank map
 
 import sys
 import argparse
