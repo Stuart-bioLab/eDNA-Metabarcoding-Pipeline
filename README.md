@@ -1,6 +1,5 @@
-# Fox-River-eDNA-metabarcoding
-An eDNA metabarcoding project focused on identifying and analyzing biodiversity through environmental DNA sequencing. This workflow uses molecular markers and bioinformatics approaches to detect species from environmental samples without direct organism collection.
-This pipeline builds on the work of [B. Moginot](https://github.com/bmoginot/Fox-River-eDNA-Pipeline) and [R. Patel](https://github.com/richapatel138/WildMileeDNAPipeline) and is ultimately based on the analysis done by [Picq et al. 2024](https://doi.org/10.1080/02705060.2024.2382454).
+# About this Repository
+This pipeline builds on the work of [B. Moginot](https://github.com/bmoginot/Fox-River-eDNA-Pipeline) and [R. Patel](https://github.com/richapatel138/WildMileeDNAPipeline) and is ultimately based on the analysis done by [Picq et al. 2024](https://doi.org/10.1080/02705060.2024.2382454). This repository serves to facilitate the analysis of environmental DNA samples collected from the Fox River by the Stuart Lab.
 
 # Running this Pipeline (in General)
 Detailed steps for running this pipeline can be found in the wiki, but here is a general overview.
