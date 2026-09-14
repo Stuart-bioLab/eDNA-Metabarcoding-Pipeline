@@ -12,10 +12,33 @@ import numpy as np
 def get_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser()
-    parser.add_argument("-m", "--metadata", help="input metadata")
-    parser.add_argument("-d", "--data", help="Path to dir containing sequence read files.")
-    parser.add_argument("-s", "--study", help="Target study to subset reads for.")
-    parser.add_argument("-f", "--file", help="Provide tsv mapping read prefix to filepath.")
+    parser.add_argument(
+        "-m", "--metadata",
+        help="Input metadata",
+        default="LIVE_FoxRiver_eDNA_Field_Data_Clean.xlsx"
+    )
+
+    parser.add_argument(
+        "-e", "--eblanks",
+        help="Extraction blank map",
+        default="all_sample_metadata.xlsx"
+    )
+
+    parser.add_argument(
+        "-d", "--data",
+        help="Path to dir containing sequence read files."
+    )
+
+    parser.add_argument(
+        "-s", "--study",
+        help="Target study to subset reads for."
+    )
+
+    parser.add_argument(
+        "-f", "--file",
+        help="Provide tsv mapping read prefix to filepath."
+    )
+    
     args = parser.parse_args()
     return args
 
@@ -215,11 +238,8 @@ def main():
     data = args.data
     reads_list = args.file
     study = args.study
-    if not args.metadata:
-        metadata = "LIVE_FoxRiver_eDNA_Field_Data_Clean.xlsx"
-    else:
-        metadata = args.metadata
-    blank_map = "all_sample_metadata.xlsx"
+    metadata = args.metadata
+    blank_map = args.eblanks
 
     studies = ["DamBaseline", "JuneJulyTemporal", "EbonyTemporal", "Filter_5.0v0.45"]
 
