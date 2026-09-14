@@ -3,6 +3,12 @@ This pipeline builds on the work of [B. Moginot](https://github.com/bmoginot/Fox
 
 # Running this Pipeline (in General)
 Detailed steps for running this pipeline can be found in the wiki, but here is a general overview.
+## Activating the Conda Virtual Environment
+All of the dependencies are installed in a Conda virtual environment that must be activated to run the following scripts. The venv can be activated simply by running the following command.
+```
+conda activate qiime2-env
+```
+The environment should be installed on the PC, but refer to [Pre-processing](https://github.com/Stuart-bioLab/eDNA-Metabarcoding-Pipeline/wiki/Pre%E2%80%90processing) for instructions for downloading dependencies.
 ## Locate Input Files
 To run this pipeline you will need the following. More information on input can be found on the [Data]() page.
 1. A directory containing sequence read files for the study of interest. These are likely contained in an external drive which should be mounted to the PC. See [Data]() for information on storage and access of this data.
