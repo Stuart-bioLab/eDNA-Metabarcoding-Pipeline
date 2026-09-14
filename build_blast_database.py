@@ -1,8 +1,9 @@
 # Retrieve all 12S vertebrate sequences from NCBI, create database files for the qiime pipeline
-# TODO: add import to qiime; add logger instead of print statements; add clargs
+# TODO: add logger instead of print statements; add clargs
 
 from Bio import Entrez, SeqIO
 import Bio
+import subprocess
 
 def generate_fasta(batch):
     """Fetch all records that matched query and filter for 12S sequences"""
@@ -80,22 +81,27 @@ def generate_taxonomy(hits):
     
     return tax_id_map
 
-def write_files(hits, tax_map):
+def write_files(hits, tax_map, out_seq, out_tax):
     """Write out sequence and taxonomy information to fasta and qiime taxa format, respectively."""
-    with open("blast_12S_db_seq.fasta", "a") as f:
+    with open(out_seq, "a") as f:
         for record in hits:
             seq = hits[record]["seq"]
             f.write(f">{record}\n")
             f.write(f"{seq}\n")
     
-    with open("blast_12S_db_tax.tsv", "a") as t:
+    with open(out_tax, "a") as t:
         for record in hits:
             tax_id = hits[record]["tax_id"]
             tax_str = tax_map[tax_id]
             joined_tax_str = ";".join(list(tax_str.values()))
             t.write(f"{record}\t{joined_tax_str}\n")
 
+    return
+
 def main():
+    out_seq = "blast_12S_db_seq.fasta"
+    out_tax = "blast_12S_db_tax.tsv"
+
     query = "refseq[filter] AND vertebrates[organism] AND mitochondrion[filter]"
 
     Entrez.email = "bmoginot@gmail.com"
@@ -130,7 +136,21 @@ def main():
 
         tax_map = generate_taxonomy(hits)
 
-        write_files(hits, tax_map)
+        write_files(hits, tax_map, out_seq, out_tax)
+
+    subprocess.run([ # import sequences into qiime format
+        "qiime", "tools", "import",
+        "--type", "FeatureData[Sequence]",
+        "--input-path", out_seq,
+        "--output-path", out_seq.replace("fasta", "qza")
+    ])
+
+    subprocess.run([ # import taxonomy into qiime format
+        "qiime", "tools", "import",
+        "--type", "FeatureData[Taxonomy]",
+        "--input-path", out_tax,
+        "--output-path", out_tax.replace("tsv", "qza")
+    ])
     print("FINISHED")
 
 main()
