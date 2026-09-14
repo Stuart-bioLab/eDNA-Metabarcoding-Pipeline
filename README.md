@@ -2,13 +2,18 @@
 An eDNA metabarcoding project focused on identifying and analyzing biodiversity through environmental DNA sequencing. This workflow uses molecular markers and bioinformatics approaches to detect species from environmental samples without direct organism collection.
 The pipeline architecture is based on those built by B. Moginot (https://github.com/bmoginot/Fox-River-eDNA-Pipeline) and R. Patel (https://github.com/richapatel138/WildMileeDNAPipeline).
 
-# ETL framework
-Data are in disparate folders, not organized by study. The pipeline needs a manifest which lists the paths to read files in a text file. The metadata maps each sample to a study(s), so it can be used to figure out where the read files for the samples are located.  
-## Pre-processing
-The script `make_manifest_metadata.py` takes the metadata, study type, and read data directory as input. It subsets the metadata for samples from the target study. It then searches the input directory and pulls out paths to files that are labelled with the sample ids from the target study. The script then creates a manifest for the pipeline. It then uses the manifest ids to index the metadata, pairing replicates with samples and generating new metadata for just the target samples. The new metadata and manifest files are required as input for the pipeline.  
-`make_manifest_metadata.py` handles duplicate values in the metadata as well as labelled duplicate read files. *This data handling is specific to this project and this metadata.*  
-
-This may be implemented into the pipeline so that only one script needs to be run, but we'll cross that bridge when we get there.  
-  
-# yaml file
-i had to downgrade to qiime version 2025.4.0 (what the initial pipeline was built on) as some funcitonality was removed from rescript
+# Running this Pipeline (in General)
+Detailed steps for running this pipeline can be found in the wiki, but here is a general overview.
+## Locate Input Files
+To run this pipeline you will need the following. More information on input can be found on the [Data]() page.
+1. A directory containing sequence read files for the study of interest. These are likely contained in an external drive which should be mounted to the PC. See [Data]() for information on storage and access of this data.
+2. A Sample Metadata file which lists information about collected samples and their related sequence reads. This file is likely found in your current working directory.
+3. An Extraction Blank Table file that pairs each sample with a corresponding extraction blank. This file is likely found in your current working directory.
+## Generate Preliminary Files
+At the time of writing this README, not all samples for this project have been sequenced. As sequencing progresses, certain input files will need to be updated to facilitate the processing of new reads. Running the `locate_samples.py` script creates up to date input files that include all currently sequenced samples. Namely, this script generates a Manifest and a Blank Metadata file, which are required as input for the pipeline. Refer to [Pre-processing]() for more information.
+## Optional Steps
+You may also want to update databases with new sequences or perform quality control before running the pipeline. These steps are not required, but they are detailed in [Pre-processing]().
+## Running Analysis
+Once the **Study Manifest** and **Blank Metadata** files have been generated, they can be passed to `metabarcoding_pipeline.py` with the `--manifest` and `--blank_metadata` arguments, respectively. The remaining arguments will be handled by the **config.ini** file. Refer to [Data]() for more information on the config file.
+## View Output Files
+Final feature tables will be found in `results/final_output/`. Otherwise, there are several intermediate output files in the subdirectories of results/ which may need to be viewed to diagnose pipeline issues. Refer to [Data]() for more information on output files.
