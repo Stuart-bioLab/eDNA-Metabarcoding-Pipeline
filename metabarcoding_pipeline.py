@@ -696,7 +696,7 @@ def filter_by_abundance(feat_tab, n):
 
     return feat_tab_drop_low_abun
 
-def decontam(logger, feat_tab, blank_metadata, outdir):
+def decontam(logger, feat_tab, blank_metadata, outdir, final_out):
     """Subtract reads from extraction and field blanks."""
     logger.info("Starting decontamination")
     ftab_df = pd.read_csv(feat_tab, sep="\t", index_col="Taxon")
@@ -756,7 +756,7 @@ def decontam(logger, feat_tab, blank_metadata, outdir):
     abun_cutoff_vals = [0.001, 0.005, 0.01, 0.05, 0.1]
     for n in abun_cutoff_vals:
         feat_tab_drop_low_abun = filter_by_abundance(ftab_drop_zeros, n)
-        feat_tab_drop_low_abun.to_csv(outdir / f"feat_tab_{n}_abundance.tsv", sep="\t")
+        feat_tab_drop_low_abun.to_csv(final_out / f"feat_tab_{n}_abundance.tsv", sep="\t")
     logger.info(f"Filtered for abundance and wrote out")
 
     logger.info("DONE with decontamination")
@@ -883,7 +883,9 @@ def main():
 
     decontam_dir = outdir / "decontam"
     decontam_dir.mkdir()
-    decontam(logger, feat_tab_mapped, blank_metadata, decontam_dir)
+    final_out_dir = outdir / "final_output" # store final abundance filtered tables here for intuitive access
+    final_out_dir.mkdir()
+    decontam(logger, feat_tab_mapped, blank_metadata, decontam_dir, final_out_dir)
 
     logger.info("pipeline end")
 
