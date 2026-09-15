@@ -1,4 +1,5 @@
 # Collect samples. Generate manifest and blank map
+# TODO: Subset for FoxSurvey
 
 import sys
 import argparse
