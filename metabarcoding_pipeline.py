@@ -1,3 +1,5 @@
+# TODO: transpose all feat tabs before writing out
+
 import argparse
 import configparser
 from pathlib import Path
