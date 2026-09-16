@@ -751,7 +751,7 @@ def decontam(logger, feat_tab, blank_metadata, outdir, final_out):
 
     zero_counts = ftab_fb_clipped[ftab_fb_clipped.sum(axis=1) < 1].index # get taxa that now have zero counts across all samples
     ftab_drop_zeros = ftab_fb_clipped.drop(zero_counts, axis=0) # drop these taxa
-    ftab_drop_zeros_out = outdir / "ftab_no_contams.tsv"
+    ftab_drop_zeros_out = outdir / "ftab_drop_zeros.tsv"
     ftab_drop_zeros.to_csv(ftab_drop_zeros_out, sep="\t")
     logger.info(f"Dropped taxa with zero counts and wrote out to {ftab_drop_zeros_out}")
 
