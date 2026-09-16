@@ -128,7 +128,7 @@ def get_args(config):
 
     parser.add_argument( # FOR DEVELOPMENT
         "--decontam",
-        action="store_true"
+        default=None
     )
 
     return parser.parse_args()
@@ -712,6 +712,7 @@ def decontam(logger, feat_tab, blank_metadata, outdir, final_out):
     ftab_minus_eblank = pd.DataFrame()
     no_eblank_reps = []
     for k, v in eblank_dict.items():
+        print(k, v)
         if k not in ftab_derep_df: # if there's no eblank for the sample, just add counts to the df as-is
             no_eblank_reps += v
             subtracted_eblank = ftab_derep_df[v]
@@ -807,81 +808,85 @@ def main():
         sys.exit(1)
     logger.info(f"loaded blank metadata: {blank_metadata}")
 
-    if not args.archive: # only import reads if archive not supplied (this takes a while)
-        reads_archive = Path(outdir / "reads.qza").resolve()
-        if not args.manifest:
-            print("please supply manifest file using the --manifest option")
-            logger.error("no manifest file supplied")
-            sys.exit(1)
-        manifest = Path(args.manifest).resolve() # only load manifest if there's no archive supplied
-        if not manifest.is_file():
-            logger.error(f"cannot access manifest {manifest}. file does not exist.")
-            sys.exit(1)
-        logger.info(f"loaded manifest: {manifest}")
-        import_reads(logger, manifest, reads_archive)
+    if not args.decontam:
+        if not args.archive: # only import reads if archive not supplied (this takes a while)
+            reads_archive = Path(outdir / "reads.qza").resolve()
+            if not args.manifest:
+                print("please supply manifest file using the --manifest option")
+                logger.error("no manifest file supplied")
+                sys.exit(1)
+            manifest = Path(args.manifest).resolve() # only load manifest if there's no archive supplied
+            if not manifest.is_file():
+                logger.error(f"cannot access manifest {manifest}. file does not exist.")
+                sys.exit(1)
+            logger.info(f"loaded manifest: {manifest}")
+            import_reads(logger, manifest, reads_archive)
+        else:
+            logger.info("skipping import and using archive file instead")
+            reads_archive = Path(args.archive).resolve() # get archive path
+        logger.info(f"loaded archive: {reads_archive}")
+
+        primers = args.forward_primer, args.reverse_primer
+        trim_dir = outdir / "trimmed_reads" # store trimmed read file here
+        trim_dir.mkdir()
+        trimmed_reads = trim_reads(logger, primers, reads_archive, threads, trim_dir)
+
+        dada_params = { # dada2 parameters from command line arguments
+            "trim_forward": args.trim_forward,
+            "trim_reverse": args.trim_reverse,
+            "trunc_forward": args.trunc_forward,
+            "trunc_reverse": args.trunc_reverse,
+            "threads": threads
+        }
+        dada_dir = outdir / "dada2" # store deniosing files here
+        dada_dir.mkdir()
+        asv_seqs, feat_table = denoise_reads(logger, trimmed_reads, dada_params, dada_dir)
+
+        vsearch_dir = outdir / "vsearch"
+        vsearch_dir.mkdir()
+        vsearch_out = run_vsearch(logger, asv_seqs, crabs_ref_tax, crabs_ref_seq, threads, vsearch_dir)
+
+        species_level = 7 # looking for exact matches all the way to species level
+        vsearch_unassigned_tax, vsearch_retained_tax = parse_output(logger, vsearch_out, vsearch_dir, species_level)
+        vsearch_unassigned_seq_archive = filter_seqs(logger, asv_seqs, vsearch_unassigned_tax, vsearch_dir)
+
+        bayes_dir = outdir / "bayes"
+        bayes_dir.mkdir()
+        bayes_out = run_nb_classifier(logger, vsearch_unassigned_seq_archive, crabs_ref_tax, crabs_ref_seq, threads, bayes_dir)
+
+        family_level = 5 # looking only above family level
+        bayes_unassigned_tax, bayes_retained_tax = parse_output(logger, bayes_out, bayes_dir, family_level)
+        bayes_unassigned_seq_archive = filter_seqs(logger, asv_seqs, bayes_unassigned_tax, bayes_dir)
+
+        blast_params = { # blast parameters from command line arguments
+            "perc_identity": args.perc_identity,
+            "query_cov": args.query_cov,
+            "max_accepts": args.max_accepts,
+            "threads": threads
+        }
+        blast_dir = outdir / "blast"
+        blast_dir.mkdir()
+        blast_out = run_blast(logger, bayes_unassigned_seq_archive, blast_ref_tax, blast_ref_seq, blast_params, blast_dir)
+
+        if blast_out.is_file(): # only run these if blast completes successfully
+            blast_unassigned_tax, blast_retained_tax = parse_output(logger, blast_out, blast_dir, family_level)
+            filter_seqs(logger, asv_seqs, blast_unassigned_tax, bayes_dir)
+        else:
+            blast_retained_tax = None
+
+        tax_files = [
+            vsearch_retained_tax,
+            bayes_retained_tax,
+            blast_retained_tax
+        ]
+
+        mapping_dir = outdir / "mapping_files"
+        mapping_dir.mkdir()
+        final_tax_tsv = stitch_tax_files(logger, tax_files, mapping_dir)
+        feat_tab_mapped = map_tax_to_feat_table(logger, feat_table, final_tax_tsv, mapping_dir)
+
     else:
-        logger.info("skipping import and using archive file instead")
-        reads_archive = Path(args.archive).resolve() # get archive path
-    logger.info(f"loaded archive: {reads_archive}")
-
-    primers = args.forward_primer, args.reverse_primer
-    trim_dir = outdir / "trimmed_reads" # store trimmed read file here
-    trim_dir.mkdir()
-    trimmed_reads = trim_reads(logger, primers, reads_archive, threads, trim_dir)
-
-    dada_params = { # dada2 parameters from command line arguments
-        "trim_forward": args.trim_forward,
-        "trim_reverse": args.trim_reverse,
-        "trunc_forward": args.trunc_forward,
-        "trunc_reverse": args.trunc_reverse,
-        "threads": threads
-    }
-    dada_dir = outdir / "dada2" # store deniosing files here
-    dada_dir.mkdir()
-    asv_seqs, feat_table = denoise_reads(logger, trimmed_reads, dada_params, dada_dir)
-
-    vsearch_dir = outdir / "vsearch"
-    vsearch_dir.mkdir()
-    vsearch_out = run_vsearch(logger, asv_seqs, crabs_ref_tax, crabs_ref_seq, threads, vsearch_dir)
-
-    species_level = 7 # looking for exact matches all the way to species level
-    vsearch_unassigned_tax, vsearch_retained_tax = parse_output(logger, vsearch_out, vsearch_dir, species_level)
-    vsearch_unassigned_seq_archive = filter_seqs(logger, asv_seqs, vsearch_unassigned_tax, vsearch_dir)
-
-    bayes_dir = outdir / "bayes"
-    bayes_dir.mkdir()
-    bayes_out = run_nb_classifier(logger, vsearch_unassigned_seq_archive, crabs_ref_tax, crabs_ref_seq, threads, bayes_dir)
-
-    family_level = 5 # looking only above family level
-    bayes_unassigned_tax, bayes_retained_tax = parse_output(logger, bayes_out, bayes_dir, family_level)
-    bayes_unassigned_seq_archive = filter_seqs(logger, asv_seqs, bayes_unassigned_tax, bayes_dir)
-
-    blast_params = { # blast parameters from command line arguments
-        "perc_identity": args.perc_identity,
-        "query_cov": args.query_cov,
-        "max_accepts": args.max_accepts,
-        "threads": threads
-    }
-    blast_dir = outdir / "blast"
-    blast_dir.mkdir()
-    blast_out = run_blast(logger, bayes_unassigned_seq_archive, blast_ref_tax, blast_ref_seq, blast_params, blast_dir)
-
-    if blast_out.is_file(): # only run these if blast completes successfully
-        blast_unassigned_tax, blast_retained_tax = parse_output(logger, blast_out, blast_dir, family_level)
-        filter_seqs(logger, asv_seqs, blast_unassigned_tax, bayes_dir)
-    else:
-        blast_retained_tax = None
-
-    tax_files = [
-        vsearch_retained_tax,
-        bayes_retained_tax,
-        blast_retained_tax
-    ]
-
-    mapping_dir = outdir / "mapping_files"
-    mapping_dir.mkdir()
-    final_tax_tsv = stitch_tax_files(logger, tax_files, mapping_dir)
-    feat_tab_mapped = map_tax_to_feat_table(logger, feat_table, final_tax_tsv, mapping_dir)
+        feat_tab_mapped = args.decontam
 
     decontam_dir = outdir / "decontam"
     decontam_dir.mkdir()
