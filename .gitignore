@@ -11,3 +11,5 @@ UR_Chicago_db_pipeline_v7.py
 *.txt
 *.qza
 *.log
+*.biom
+*.qzv
