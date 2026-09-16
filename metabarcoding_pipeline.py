@@ -712,7 +712,6 @@ def decontam(logger, feat_tab, blank_metadata, outdir, final_out):
     ftab_minus_eblank = pd.DataFrame()
     no_eblank_reps = []
     for k, v in eblank_dict.items():
-        print(k, v)
         if k not in ftab_derep_df: # if there's no eblank for the sample, just add counts to the df as-is
             no_eblank_reps += v
             subtracted_eblank = ftab_derep_df[v]
