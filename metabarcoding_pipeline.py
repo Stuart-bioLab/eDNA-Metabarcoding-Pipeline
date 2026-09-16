@@ -869,7 +869,7 @@ def main():
 
         if blast_out.is_file(): # only run these if blast completes successfully
             blast_unassigned_tax, blast_retained_tax = parse_output(logger, blast_out, blast_dir, family_level)
-            filter_seqs(logger, asv_seqs, blast_unassigned_tax, bayes_dir)
+            filter_seqs(logger, asv_seqs, blast_unassigned_tax, blast_dir)
         else:
             blast_retained_tax = None
 
