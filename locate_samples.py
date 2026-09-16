@@ -182,6 +182,12 @@ def build_extraction_map(infile, id_list, study, outdir):
                 if sam_id not in written_sam_ids: # don't repeat sample ids
                     f.write(f"{sam_id}\t{eb}\n")
                     written_sam_ids.append(sam_id)
+        missed_ids = [x for x in id_list if x not in written_sam_ids] # get ids that aren't in the eb metadata
+        for i in missed_ids:
+            sam_id = re.sub("-rep.*$", "", i)
+            if sam_id not in written_sam_ids:
+                f.write(f"{sam_id}\tNA\n")
+                written_sam_ids.append(sam_id)
 
     return eblank_sam_ids, outfile
 
