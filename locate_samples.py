@@ -1,5 +1,4 @@
 # Collect samples. Generate manifest and blank map
-# TODO: Subset for FoxSurvey
 
 import sys
 import argparse
@@ -248,7 +247,7 @@ def main():
     metadata = args.metadata
     blank_map = args.eblanks
 
-    studies = ["DamBaseline", "JuneJulyTemporal", "EbonyTemporal", "Filter_5.0v0.45"]
+    studies = ["DamBaseline", "JuneJulyTemporal", "EbonyTemporal", "Filter_5.0v0.45", "FoxSurvey"]
 
     if study == "d":
         study = "DamBaseline"
@@ -258,6 +257,8 @@ def main():
         study = "EbonyTemporal"
     if study == "f":
         study = "Filter_5.0v0.45"
+    if study == "s":
+        study = "FoxSurvey"
 
     if study not in studies:
         print("Possible studies include", end=" ")
