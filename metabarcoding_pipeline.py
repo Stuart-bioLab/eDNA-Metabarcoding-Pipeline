@@ -775,6 +775,10 @@ def decontam(logger, feat_tab, blank_metadata, outdir, final_out):
         "Scardinius erythrophthalmus", # common rudd
         "Somateria mollissima", # common eider
         "Numida meleagris", # helmeted guineafowl
+        "Sturnus vulgaris", # european starling
+        "Canis", # dogs
+        "Canidae", # dogs
+        "Gallinula chloropus" # common gallinule
     ]
     ftab_drop_contams = ftab_drop_zeros[~ftab_drop_zeros.index.isin(contams)] # drop contaminants
     ftab_drop_contams_out = outdir / "ftab_drop_contams.tsv"
@@ -797,7 +801,9 @@ def main():
         outdir = create_outdir("results")
     else:
         outdir = Path(args.output).resolve()
-        outdir.mkdir(exist_ok=True)
+        if outdir.is_dir():
+            shutil.rmtree(outdir)
+        outdir.mkdir()
     logger = setup_logger(outdir / "pipeline.log")
 
     threads = args.threads
