@@ -755,9 +755,29 @@ def decontam(logger, feat_tab, blank_metadata, outdir, final_out):
     ftab_drop_zeros.to_csv(ftab_drop_zeros_out, sep="\t")
     logger.info(f"Dropped taxa with zero counts and wrote out to {ftab_drop_zeros_out}")
 
+    contams = [ # contaminants based on a look at all detected taxa
+        "Homo sapiens", # human
+        "Bos taurus", # cow
+        "Gallus gallus", # chicken
+        "Sus scrofa", # pig
+        "Felis catus", # cat
+        "Inia geoffrensis", # amazon river dolphin
+        "Sternopygus dariensis", # darien knifefish
+        "Amblydoras gonzalezi", # talking catfish
+        "Brycon", # south american characins
+        "Herichthys cyanoguttatus", # rio grande cichlid
+        "Scardinius erythrophthalmus", # common rudd
+        "Somateria mollissima", # common eider
+        "Numida meleagris", # helmeted guineafowl
+    ]
+    ftab_drop_contams = ftab_drop_zeros[~ftab_drop_zeros.index.isin(contams)] # drop contaminants
+    ftab_drop_contams_out = outdir / "ftab_drop_contams.tsv"
+    ftab_drop_contams.to_csv(ftab_drop_contams_out, sep="\t")
+    logger.info(f"Dropped likley contaminants and wrote out to {ftab_drop_contams_out}")
+
     abun_cutoff_vals = [0.001, 0.005, 0.01, 0.05, 0.1]
     for n in abun_cutoff_vals:
-        feat_tab_drop_low_abun = filter_by_abundance(ftab_drop_zeros, n)
+        feat_tab_drop_low_abun = filter_by_abundance(ftab_drop_contams, n)
         feat_tab_drop_low_abun.to_csv(final_out / f"feat_tab_{n}_abundance.tsv", sep="\t")
     logger.info(f"Filtered for abundance and wrote out")
 
