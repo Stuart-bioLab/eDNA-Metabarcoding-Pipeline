@@ -796,7 +796,7 @@ def main():
     if not args.output:
         outdir = create_outdir("results")
     else:
-        outdir = args.output
+        outdir = Path(args.output).resolve()
         outdir.mkdir()
     logger = setup_logger(outdir / "pipeline.log")
 
