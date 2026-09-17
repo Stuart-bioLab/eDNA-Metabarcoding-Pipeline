@@ -755,7 +755,7 @@ def decontam(logger, feat_tab, blank_metadata, outdir, final_out):
     ftab_drop_zeros.to_csv(ftab_drop_zeros_out, sep="\t")
     logger.info(f"Dropped taxa with zero counts and wrote out to {ftab_drop_zeros_out}")
 
-    contams = [ # contaminants based on a look at all detected taxa
+    contams = [ # contaminants or misassignments based on a look at all detected taxa
         "Homo sapiens", # human
         "Bos taurus", # cow
         "Gallus gallus", # chicken
