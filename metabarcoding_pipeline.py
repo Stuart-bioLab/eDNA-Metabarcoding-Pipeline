@@ -126,6 +126,12 @@ def get_args(config):
         help="map pairing samples with respective field and extraction blanks"
     )
 
+    parser.add_argument(
+        "--output",
+        default=None,
+        help="name of output directory"
+    )
+
     parser.add_argument( # FOR DEVELOPMENT
         "--decontam",
         default=None
@@ -787,7 +793,11 @@ def decontam(logger, feat_tab, blank_metadata, outdir, final_out):
 def main():
     config = load_config("config.ini")
     args = get_args(config)
-    outdir = create_outdir("results")
+    if not args.output:
+        outdir = create_outdir("results")
+    else:
+        outdir = args.output
+        outdir.mkdir()
     logger = setup_logger(outdir / "pipeline.log")
 
     threads = args.threads
