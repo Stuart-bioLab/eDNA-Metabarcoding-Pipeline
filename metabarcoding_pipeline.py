@@ -797,7 +797,7 @@ def main():
         outdir = create_outdir("results")
     else:
         outdir = Path(args.output).resolve()
-        outdir.mkdir()
+        outdir.mkdir(exist_ok=True)
     logger = setup_logger(outdir / "pipeline.log")
 
     threads = args.threads
