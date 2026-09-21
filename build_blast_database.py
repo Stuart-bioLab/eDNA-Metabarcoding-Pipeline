@@ -73,10 +73,8 @@ def generate_taxonomy(hits):
             name = item["ScientificName"]
             if rank in tax_dict.keys():
                 tax_dict[rank] = f"{rank[0]}__{name}"
-        tax_dict["kingdom"] = "k__NA"
-        genus, species = entry.get("ScientificName", []).split(" ")[:2]
-        tax_dict["genus"] = "g__" + genus
-        tax_dict["species"] = "s__" + genus + "_" + species
+        species = entry.get("ScientificName", []).split(" ")[1]
+        tax_dict["species"] = "s__" + species
         tax_id_map[tax_id] = tax_dict
     
     return tax_id_map
