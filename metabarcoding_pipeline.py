@@ -780,6 +780,10 @@ def decontam(logger, feat_tab, blank_metadata, outdir, final_out):
         "Canidae", # dogs
         "Gallinula chloropus" # common gallinule
     ]
+    just_contams = ftab_drop_zeros[ftab_drop_zeros.index.isin(contams)]
+    just_contams.to_csv(outdir / "feat_tab_contams.tsv", sep="\t")
+    just_contams.sum(axis=1).to_csv(outdir / "contam_totals.tsv", sep="\t")
+
     ftab_drop_contams = ftab_drop_zeros[~ftab_drop_zeros.index.isin(contams)] # drop contaminants
     ftab_drop_contams_out = outdir / "ftab_drop_contams.tsv"
     ftab_drop_contams.to_csv(ftab_drop_contams_out, sep="\t")
