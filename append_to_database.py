@@ -1,4 +1,4 @@
-# Update picq database with newly-generated mitochondrial sequences
+# Update picq database with space-separated list of genbank ids
 
 import subprocess
 import sys
