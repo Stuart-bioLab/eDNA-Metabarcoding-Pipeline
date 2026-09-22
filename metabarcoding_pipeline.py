@@ -704,10 +704,6 @@ def filter_by_abundance(feat_tab, n):
 
     return feat_tab_drop_low_abun
 
-def calc_rel_abun(feat_tab):
-    """Calculate relative abudance, rounding to 5 decimal places."""
-    return feat_tab.div(feat_tab.sum(axis=0), axis=1).round(5)
-
 def decontam(logger, feat_tab, blank_metadata, outdir, final_out):
     """Subtract reads from extraction and field blanks."""
     logger.info("Starting decontamination")
@@ -797,8 +793,6 @@ def decontam(logger, feat_tab, blank_metadata, outdir, final_out):
     for n in abun_cutoff_vals:
         feat_tab_drop_low_abun = filter_by_abundance(ftab_drop_contams, n)
         feat_tab_drop_low_abun.to_csv(final_out / f"feat_tab_{n}_counts.tsv", sep="\t")
-        feat_tab_rel_abun = calc_rel_abun(feat_tab_drop_low_abun)
-        feat_tab_rel_abun.to_csv(final_out / f"feat_tab_{n}_rel_abun.tsv", sep="\t")
     logger.info(f"Filtered for abundance and wrote out")
 
     logger.info("DONE with decontamination")
