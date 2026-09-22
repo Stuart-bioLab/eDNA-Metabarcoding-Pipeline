@@ -48,7 +48,11 @@ def subset_metadata(metadata, study, outdir):
     unnamed_cols = meta_df.columns[meta_df.columns.str.startswith("Unnamed")] # find unnamed columns (i don't know why they're here)
     meta_df.drop(unnamed_cols, axis=1, inplace=True) # drop unnamed cols
 
-    meta_subset_df = meta_df[~meta_df[study].isna()] # subset dataframe for samples in target study
+    if study != "AllSamples": # don't subset if looking at all samples
+        meta_subset_df = meta_df[~meta_df[study].isna()] # subset dataframe for samples in target study
+    else:
+        meta_subset_df = meta_df
+
     meta_subset_df.to_csv(outdir / f"{study}_subset_metadata.tsv", sep="\t", index=False) # write out maybe i'll want to look at this idk
 
     sam_ids = list(meta_subset_df["Sample ID"]) # get list of sample names from study
@@ -247,7 +251,7 @@ def main():
     metadata = args.metadata
     blank_map = args.eblanks
 
-    studies = ["DamBaseline", "JuneJulyTemporal", "EbonyTemporal", "Filter_5.0v0.45", "FoxSurvey"]
+    studies = ["DamBaseline", "JuneJulyTemporal", "EbonyTemporal", "Filter_5.0v0.45", "FoxSurvey", "AllSamples"]
 
     if study == "d":
         study = "DamBaseline"
@@ -259,6 +263,8 @@ def main():
         study = "Filter_5.0v0.45"
     if study == "s":
         study = "FoxSurvey"
+    if study == "a":
+        study = "AllSamples"
 
     if study not in studies:
         print("Possible studies include", end=" ")
