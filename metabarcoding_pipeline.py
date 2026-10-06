@@ -130,6 +130,11 @@ def get_args(config):
         help="name of output directory"
     )
 
+    parser.add_argument( # subset for just fish taxa
+        "--fishes",
+        action="store_true"
+    )
+
     parser.add_argument( # FOR DEVELOPMENT
         "--decontam",
         default=None
@@ -702,7 +707,53 @@ def filter_by_abundance(feat_tab, n):
 
     return feat_tab_drop_low_abun
 
-def decontam(logger, feat_tab, blank_metadata, outdir, final_out):
+def filter_eblanks(logger, ftab, eblank_dict, outdir):
+    ftab_minus_eblank = pd.DataFrame()
+    no_eblank_reps = []
+    for k, v in eblank_dict.items():
+        if k not in ftab: # if there's no eblank for the sample, just add counts to the df as-is
+            no_eblank_reps += v
+            subtracted_eblank = ftab[v]
+        else:
+            subtracted_eblank = ftab[v].sub(ftab[k], axis=0) # subtract eblank counts from corresponding sample replicates
+        ftab_minus_eblank = pd.concat([ftab_minus_eblank, subtracted_eblank], axis=1) # add subtracted counts to build new dataframe without ebs and eb counts
+    
+    ftab_eb_clipped = ftab_minus_eblank.clip(lower=0) # set values < 0 to 0
+    ftab_eb_clipped_out = outdir / "ftab_minus_eblank.tsv"
+    ftab_eb_clipped.to_csv(ftab_eb_clipped_out, sep="\t")
+    logger.info(f"Subtracted eblank reads and wrote out to {ftab_eb_clipped_out}")
+
+    return ftab_eb_clipped
+
+def filter_fblanks(logger, ftab, fblank_dict, outdir):
+    just_fblank_sams = pd.DataFrame()
+    for fb in list(fblank_dict.keys()):
+        if fb in ftab.columns:
+            just_fblank_sams = pd.concat([just_fblank_sams, ftab[fb]], axis=1)
+    just_fblank_sams.index.rename("Taxon", inplace=True)
+    just_fblank_sams_out = outdir / "ftab_just_fblanks.tsv"
+    just_fblank_sams.to_csv(just_fblank_sams_out, sep="\t")
+    logger.info(f"Wrote out just field blank samples to {just_fblank_sams_out}")
+
+    ftab_minus_fblank = pd.DataFrame()
+    no_fblank_sams = []
+    for k, v in fblank_dict.items():
+        if k not in ftab:
+            skip_fblanks = [x for x in v if "FB" not in x] # don't add fblanks to final feat tab
+            no_fblank_sams += skip_fblanks
+            subtracted_fblank = ftab[skip_fblanks]
+        else:
+            subtracted_fblank = ftab[v].sub(ftab[k], axis=0)
+        ftab_minus_fblank = pd.concat([ftab_minus_fblank, subtracted_fblank], axis=1)
+
+    ftab_fb_clipped = ftab_minus_fblank.clip(lower=0) # set values < 0 to 0
+    ftab_fb_clipped_out = outdir / "ftab_minus_fblank.tsv"
+    ftab_fb_clipped.to_csv(ftab_fb_clipped_out, sep="\t")
+    logger.info(f"Subtracted fblank reads and wrote out to {ftab_fb_clipped_out}")
+
+    return ftab_fb_clipped
+
+def decontam(logger, feat_tab, blank_metadata, fishes, outdir, final_out):
     """Subtract reads from extraction and field blanks."""
     logger.info("Starting decontamination")
     ftab_df = pd.read_csv(feat_tab, sep="\t", index_col="Taxon")
@@ -713,48 +764,12 @@ def decontam(logger, feat_tab, blank_metadata, outdir, final_out):
     ftab_derep_df.to_csv(ftab_derep_df_out, sep="\t")
     logger.info(f"Wrote out summed replicates to {ftab_derep_df_out}")
 
-    ftab_minus_eblank = pd.DataFrame()
-    no_eblank_reps = []
-    for k, v in eblank_dict.items():
-        if k not in ftab_derep_df: # if there's no eblank for the sample, just add counts to the df as-is
-            no_eblank_reps += v
-            subtracted_eblank = ftab_derep_df[v]
-        else:
-            subtracted_eblank = ftab_derep_df[v].sub(ftab_derep_df[k], axis=0) # subtract eblank counts from corresponding sample replicates
-        ftab_minus_eblank = pd.concat([ftab_minus_eblank, subtracted_eblank], axis=1) # add subtracted counts to build new dataframe without ebs and eb counts
-    
-    ftab_eb_clipped = ftab_minus_eblank.clip(lower=0) # set values < 0 to 0
-    ftab_eb_clipped_out = outdir / "ftab_minus_eblank.tsv"
-    ftab_eb_clipped.to_csv(ftab_eb_clipped_out, sep="\t")
-    logger.info(f"Subtracted eblank reads and wrote out to {ftab_eb_clipped_out}")
+    ftab_minus_eblank = filter_eblanks(logger, ftab_derep_df, eblank_dict, outdir)
 
-    just_fblank_sams = pd.DataFrame()
-    for fb in list(fblank_dict.keys()):
-        if fb in ftab_derep_df.columns:
-            just_fblank_sams = pd.concat([just_fblank_sams, ftab_derep_df[fb]], axis=1)
-    just_fblank_sams.index.rename("Taxon", inplace=True)
-    just_fblank_sams_out = outdir / "ftab_just_fblanks.tsv"
-    just_fblank_sams.to_csv(just_fblank_sams_out, sep="\t")
-    logger.info(f"Wrote out just field blank samples to {just_fblank_sams_out}")
+    ftab_minus_fblank = filter_fblanks(logger, ftab_minus_eblank, fblank_dict, outdir)
 
-    ftab_minus_fblank = pd.DataFrame()
-    no_fblank_sams = []
-    for k, v in fblank_dict.items():
-        if k not in ftab_derep_df:
-            skip_fblanks = [x for x in v if "FB" not in x] # don't add fblanks to final feat tab
-            no_fblank_sams += skip_fblanks
-            subtracted_fblank = ftab_derep_df[skip_fblanks]
-        else:
-            subtracted_fblank = ftab_derep_df[v].sub(ftab_derep_df[k], axis=0)
-        ftab_minus_fblank = pd.concat([ftab_minus_fblank, subtracted_fblank], axis=1)
-
-    ftab_fb_clipped = ftab_minus_fblank.clip(lower=0) # set values < 0 to 0
-    ftab_fb_clipped_out = outdir / "ftab_minus_fblank.tsv"
-    ftab_fb_clipped.to_csv(ftab_fb_clipped_out, sep="\t")
-    logger.info(f"Subtracted fblank reads and wrote out to {ftab_fb_clipped_out}")
-
-    zero_counts = ftab_fb_clipped[ftab_fb_clipped.sum(axis=1) < 1].index # get taxa that now have zero counts across all samples
-    ftab_drop_zeros = ftab_fb_clipped.drop(zero_counts, axis=0) # drop these taxa
+    zero_counts = ftab_minus_fblank[ftab_minus_fblank.sum(axis=1) < 1].index # get taxa that now have zero counts across all samples
+    ftab_drop_zeros = ftab_minus_fblank.drop(zero_counts, axis=0) # drop these taxa
     ftab_drop_zeros_out = outdir / "ftab_drop_zeros.tsv"
     ftab_drop_zeros.to_csv(ftab_drop_zeros_out, sep="\t")
     logger.info(f"Dropped taxa with zero counts and wrote out to {ftab_drop_zeros_out}")
@@ -778,6 +793,7 @@ def decontam(logger, feat_tab, blank_metadata, outdir, final_out):
         "Canidae", # dogs
         "Gallinula chloropus" # common gallinule
     ]
+
     just_contams = ftab_drop_zeros[ftab_drop_zeros.index.isin(contams)]
     just_contams.to_csv(outdir / "feat_tab_contams.tsv", sep="\t")
     just_contams.sum(axis=1).to_csv(outdir / "contam_totals.tsv", sep="\t")
@@ -925,11 +941,13 @@ def main():
     else:
         feat_tab_mapped = args.decontam
 
+    fishes = True if args.fishes else False # subset for only fishes if True
+
     decontam_dir = outdir / "decontam"
     decontam_dir.mkdir()
     final_out_dir = outdir / "final_output" # store final abundance filtered tables here for intuitive access
     final_out_dir.mkdir()
-    decontam(logger, feat_tab_mapped, blank_metadata, decontam_dir, final_out_dir)
+    decontam(logger, feat_tab_mapped, blank_metadata, fishes, decontam_dir, final_out_dir)
 
     logger.info("pipeline end")
 
