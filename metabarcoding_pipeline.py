@@ -136,7 +136,7 @@ def get_args(config):
     )
 
     parser.add_argument( # FOR DEVELOPMENT
-        "--decontam",
+        "--map",
         default=None
     )
 
@@ -755,7 +755,7 @@ def filter_fblanks(logger, ftab, fblank_dict, outdir):
 
     return ftab_fb_clipped
 
-def decontam(logger, feat_tab, blank_metadata, fishes, outdir, final_out):
+def decontam(logger, feat_tab, blank_metadata, outdir, final_out):
     """Subtract reads from extraction and field blanks."""
     logger.info("Starting decontamination")
     ftab_df = pd.read_csv(feat_tab, sep="\t", index_col="Taxon")
@@ -863,7 +863,7 @@ def main():
         sys.exit(1)
     logger.info(f"loaded blank metadata: {blank_metadata}")
 
-    if not args.decontam:
+    if not args.map:
         if not args.archive: # only import reads if archive not supplied (this takes a while)
             reads_archive = Path(outdir / "reads.qza").resolve()
             if not args.manifest:
@@ -934,22 +934,25 @@ def main():
             bayes_retained_tax,
             blast_retained_tax
         ]
-
+    
         mapping_dir = outdir / "mapping_files"
         mapping_dir.mkdir()
         final_tax_tsv = stitch_tax_files(logger, tax_files, mapping_dir)
-        feat_tab_mapped = map_tax_to_feat_table(logger, feat_table, final_tax_tsv, mapping_dir)
 
     else:
-        feat_tab_mapped = args.decontam
+        mapping_dir = outdir / "mapping_files"
+        mapping_dir.mkdir()
+        feat_table = Path(args.map) / "dada2" / "feat_table.qza"
+        final_tax_tsv = Path(args.map) / "mapping_files" / "final_tax.tsv"
 
     fishes = True if args.fishes else False # subset for only fishes if True
+    feat_tab_mapped = map_tax_to_feat_table(logger, feat_table, final_tax_tsv, mapping_dir)
 
     decontam_dir = outdir / "decontam"
     decontam_dir.mkdir()
     final_out_dir = outdir / "final_output" # store final abundance filtered tables here for intuitive access
     final_out_dir.mkdir()
-    decontam(logger, feat_tab_mapped, blank_metadata, fishes, decontam_dir, final_out_dir)
+    decontam(logger, feat_tab_mapped, blank_metadata, decontam_dir, final_out_dir)
 
     logger.info("pipeline end")
 
