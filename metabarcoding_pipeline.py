@@ -805,7 +805,7 @@ def main():
         outdir = Path(args.output).resolve()
         if outdir.is_dir():
             shutil.rmtree(outdir)
-        outdir.mkdir()
+        outdir.mkdir(parents=True)
     logger = setup_logger(outdir / "pipeline.log")
 
     threads = args.threads
