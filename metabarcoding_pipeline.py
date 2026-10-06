@@ -708,6 +708,7 @@ def filter_by_abundance(feat_tab, n):
     return feat_tab_drop_low_abun
 
 def filter_eblanks(logger, ftab, eblank_dict, outdir):
+    """Subtract extraction blank counts from corresponding samples."""
     ftab_minus_eblank = pd.DataFrame()
     no_eblank_reps = []
     for k, v in eblank_dict.items():
@@ -726,6 +727,7 @@ def filter_eblanks(logger, ftab, eblank_dict, outdir):
     return ftab_eb_clipped
 
 def filter_fblanks(logger, ftab, fblank_dict, outdir):
+    """Subtract field blank counts from corresponding samples."""
     just_fblank_sams = pd.DataFrame()
     for fb in list(fblank_dict.keys()):
         if fb in ftab.columns:
