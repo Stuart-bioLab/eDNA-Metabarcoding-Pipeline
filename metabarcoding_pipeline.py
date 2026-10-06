@@ -533,7 +533,7 @@ def run_blast(logger, asv_seqs, ref_tax, ref_seq, params, outdir):
 
     return out_tax
 
-def stitch_tax_files(logger, tax_files, outdir):
+def stitch_tax_files(logger, tax_files, fishes, outdir):
     """Assemble all taxa retained across all three classification steps and combine them into one tsv."""
     logger.info("assembling final tax file")
 
@@ -546,6 +546,15 @@ def stitch_tax_files(logger, tax_files, outdir):
             continue
         all_tax_dfs.append(current_tax_df)
     final_tax_df = pd.concat(all_tax_dfs).drop_duplicates() # stitch taxonomy files together and drop duplicates
+
+    if fishes:
+        final_tax_df = final_tax_df[ # subset taxa for just fishes
+            final_tax_df["Taxon"] # get taxonomic assignments
+            .apply( # apply this to all rows in the Taxon col
+                lambda x: x.split(";")[2] # pull out the class level
+            )
+            .str.contains("Actinopter") # check if the taxon is a fish
+        ]
     
     final_tax_tsv = outdir / "final_tax.tsv"
     final_tax_df.to_csv(final_tax_tsv, sep="\t", index=False)
@@ -934,18 +943,21 @@ def main():
             bayes_retained_tax,
             blast_retained_tax
         ]
-    
-        mapping_dir = outdir / "mapping_files"
-        mapping_dir.mkdir()
-        final_tax_tsv = stitch_tax_files(logger, tax_files, mapping_dir)
 
     else:
-        mapping_dir = outdir / "mapping_files"
-        mapping_dir.mkdir()
-        feat_table = Path(args.map) / "dada2" / "feat_table.qza"
-        final_tax_tsv = Path(args.map) / "mapping_files" / "final_tax.tsv"
+        indir = Path(args.map)
+        tax_files = [
+            indir / "vsearch" / "vsearch_retained_tax.tsv",
+            indir / "bayes" / "nb_retained_tax.tsv",
+            indir / "blast" / "blast_retained_tax.tsv"
+        ]
+        feat_table = indir / "dada2" / "feat_table.qza"
 
     fishes = True if args.fishes else False # subset for only fishes if True
+
+    mapping_dir = outdir / "mapping_files"
+    mapping_dir.mkdir()
+    final_tax_tsv = stitch_tax_files(logger, tax_files, fishes, mapping_dir)
     feat_tab_mapped = map_tax_to_feat_table(logger, feat_table, final_tax_tsv, mapping_dir)
 
     decontam_dir = outdir / "decontam"
