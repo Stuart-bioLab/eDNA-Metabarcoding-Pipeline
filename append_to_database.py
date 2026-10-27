@@ -1,4 +1,4 @@
-# Update picq database with space-separated list of genbank ids
+# Update picq database with space-separated list of species names
 
 import subprocess
 import sys
@@ -13,13 +13,23 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-t", "--tax_file")
     parser.add_argument("-s", "--seq_file")
-    parser.add_argument("-i", "--names_list", nargs="+")
+    parser.add_argument("-n", "--names", nargs="+")
     args = parser.parse_args()
     return args
 
-def fetch_seqs(ids):
-    new_entries = defaultdict(lambda: {"seq": None, "tax_id": None, "tax_str": None})
+def search_name(name):
+    """Seach for mitochondrial sequences associated with target taxon and get first 20 results."""
+    handle = Entrez.esearch(
+        db="nucleotide",
+        term=f"{name}[organism] AND mitochondrion[filter]",
+        retmax=20
+    )
 
+    results = Entrez.read(handle)
+    return results["IdList"]
+
+def fetch_seqs(name, ids, hits):
+    """Iterate over IDs until a 12S sequence is found. Store record ID, taxonomy ID, and sequence"""
     handle = Entrez.efetch(
         db="nucleotide",
         id=ids,
@@ -29,26 +39,37 @@ def fetch_seqs(ids):
 
     records = list(SeqIO.parse(handle, "genbank"))
     for r in records:
-        new_entries[r.id]["seq"] = r.seq
-        for feat in r.features: # record features store genetic and taxonomic info
-            if feat.type == "source": # looking for taxonomy information
-                new_entries[r.id]["tax_id"] = feat.qualifiers.get("db_xref")[0][6:] # just get the taxonomy id number
-    
-    return new_entries
+        for f in r.features:
+            if f.type == "gene": # only looking for mitchondrial rRNA sequences
+                gene_name = f.qualifiers.get("gene", []) # get the name of the gene
+                if "rrn12" in gene_name: # only look at record if its a 12S sequence
+                    hits[name]["seq"] = f.extract(r.seq) # store 12S sequence
+                    hits[name]["record_id"] = r.id
+                    hits[name]["label"] = f"{name} {r.id}".replace(" ", "_")
+            if f.type == "source": # looking for taxonomy information
+                hits[name]["tax_id"] = f.qualifiers.get("db_xref")[0][6:] # just get the taxonomy id number
+        if hits[name]["seq"]: # if 12S sequence found, exit loop
+            print(f"Foud 12S sequence for {name}.")
+            break
+    else:
+        print(f"Could not find sequence for {name}.")
 
-def fetch_tax(new_entries):
-    tax_id_list = [new_entries[x]["tax_id"] for x in new_entries] # extract all taxonomic ids
+    return hits
+
+def fetch_tax(hits):
+    """Get taxonomy information for extracted record."""
+    name_map = {hits[x]["tax_id"]: x for x in hits} # store name with tax id so its easy to map back to hits dict
+    tax_id_list = [hits[x]["tax_id"] for x in hits] # extract all taxonomic ids
     handle = Entrez.efetch(
         db="taxonomy",
         id=tax_id_list,
         retmode="xml"
     )
 
-    record = Entrez.read(handle)
+    records = Entrez.read(handle)
 
-    tax_id_map = {}
-    for entry in record:
-        tax_id = entry.get("TaxId") # get the id to map back to the hits dict
+    for r in records:
+        tax_id = r.get("TaxId") # get the id to map back to the hits dict
         tax_dict = { # initialize dict to store taxonomy info
             "kingdom": "k__NA",
             "phylum": "p__NA",
@@ -58,16 +79,20 @@ def fetch_tax(new_entries):
             "genus": "g__NA",
             "species": "s__NA"
         }
-        for item in entry.get("LineageEx", []): # extract tax info and format for qiime
+        for item in r.get("LineageEx", []): # extract tax info and format for qiime
             rank = item["Rank"]
             name = item["ScientificName"]
             if rank in tax_dict.keys():
                 tax_dict[rank] = f"{rank[0]}__{name}"
-        species = entry.get("ScientificName", []).split(" ")[1]
+        species = r.get("ScientificName", []).split(" ")[1]
         tax_dict["species"] = "s__" + species
-        tax_id_map[tax_id] = tax_dict
 
-    return tax_id_map
+        name = name_map[tax_id]
+        hits[name]["tax_str"] = ";".join(tax_dict.values())
+
+        print(f"Found taxonomy for {name}.")
+
+    return hits
 
 def export_database(seq_file, tax_file, outdir):
     """Decompress qiime archive files so that the database files can be written to."""
@@ -83,18 +108,19 @@ def export_database(seq_file, tax_file, outdir):
         "--output-path", outdir
     ])
 
-def append_entries(db_dict, seq_file, tax_file):
+def append_entries(hits, seq_file, tax_file):
     """Add sequence and taxonomy for input records to respective file."""
     with open(seq_file, "a") as f:
-        for record_id in db_dict:
-            seq = db_dict[record_id]["seq"]
-            f.write(f">{record_id}\n{seq}\n")
+        for name in hits:
+            label = hits[name]["label"]
+            seq = hits[name]["seq"]
+            f.write(f">{label}\n{seq}\n")
     
     with open(tax_file, "a") as f:
-        for record_id in db_dict:
-            tax_str = db_dict[record_id]["tax_str"]
-            joined_tax_str = ";".join(list(tax_str.values()))
-            f.write(f"{record_id}\t{joined_tax_str}\n")
+        for name in hits:
+            label = hits[name]["label"]
+            tax_str = hits[name]["tax_str"]
+            f.write(f"{label}\t{tax_str}\n")
 
 def import_database(seq_file, tax_file, outdir):
     """Compress sequence and taxonomy files back to qiime archive format."""
@@ -114,11 +140,18 @@ def import_database(seq_file, tax_file, outdir):
 
 def main():
     args = get_args()
+
     old_tax = args.tax_file
+    if not old_tax:
+        old_tax = "picq_2024_12S_database/db_tax.qza"
+
     old_seq = args.seq_file
-    names = args.names_list
-    if not names:
-        print("Please give taxa to search for with --names_list argument.")
+    if not old_seq:
+        old_seq = "picq_2024_12S_database/db_seq.qza"
+
+    names_to_search = args.names
+    if not names_to_search:
+        print("Please give taxa to search for with --names argument.")
         sys.exit(1)
 
     outdir = Path("updated_database").resolve()
@@ -126,17 +159,28 @@ def main():
 
     Entrez.email = "bmoginot5@gmail.com"
 
-    new_entries = fetch_seqs(names)
-    # tax_id_map = fetch_tax(new_entries)
-    
-    # for record_id in new_entries.keys():
-    #     new_entries[record_id]["tax_str"] = tax_id_map[new_entries[record_id]["tax_id"]]
+    hits = defaultdict(lambda: {"record_id": None, "seq": None, "tax_id": None, "tax_str": None, "label": None})
 
-    # export_database(old_seq, old_tax, outdir)
-    # unzipped_seq = outdir / "dna-sequences.fasta"
-    # unzipped_tax = outdir / "taxonomy.tsv"
-    # append_entries(new_entries, unzipped_seq, unzipped_tax)
-    # import_database(unzipped_seq, unzipped_tax, outdir)
+    for name in names_to_search:
+        print(f"Searching for {name}...")
+        target_ids = search_name(name)
+        hits = fetch_seqs(name, target_ids, hits)
+    
+    print("Finding taxonomy for all entries...")
+    hits = fetch_tax(hits)
+
+    print("Decompressing input files...")
+    export_database(old_seq, old_tax, outdir)
+    unzipped_seq = outdir / "dna-sequences.fasta"
+    unzipped_tax = outdir / "taxonomy.tsv"
+
+    print("Appending sequences and taxonomy...")
+    append_entries(hits, unzipped_seq, unzipped_tax)
+
+    print("Re-importing updated database...")
+    import_database(unzipped_seq, unzipped_tax, outdir)
+
+    print("All done.")
 
 if __name__ == "__main__":
     main()
