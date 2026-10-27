@@ -5,6 +5,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 from Bio import Entrez, SeqIO
+from Bio.Seq import Seq
 import argparse
 from collections import defaultdict
 
@@ -53,6 +54,7 @@ def fetch_seqs(name, ids, hits):
             break
     else:
         print(f"Could not find sequence for {name}.")
+        del hits[name]
 
     return hits
 
@@ -108,13 +110,15 @@ def export_database(seq_file, tax_file, outdir):
         "--output-path", outdir
     ])
 
-def append_entries(hits, seq_file, tax_file):
+def append_entries(hits, seq_file, tax_file, f_primer, r_primer):
     """Add sequence and taxonomy for input records to respective file."""
     with open(seq_file, "a") as f:
         for name in hits:
+            print(hits[name])
             label = hits[name]["label"]
             seq = hits[name]["seq"]
-            f.write(f">{label}\n{seq}\n")
+            v5_region = seq.split(f_primer)[-1].split(r_primer)[0] # this is really loosey-goosey
+            f.write(f">{label}\n{v5_region}\n")
     
     with open(tax_file, "a") as f:
         for name in hits:
@@ -154,6 +158,9 @@ def main():
         print("Please give taxa to search for with --names argument.")
         sys.exit(1)
 
+    f_primer = Seq("ACTGGGATTAGATACCCC")
+    r_primer = Seq("TAGAACAGGCTCCTCTAG").reverse_complement()[:-3]
+
     outdir = Path("updated_database").resolve()
     outdir.mkdir(exist_ok=True)
 
@@ -169,16 +176,16 @@ def main():
     print("Finding taxonomy for all entries...")
     hits = fetch_tax(hits)
 
-    print("Decompressing input files...")
-    export_database(old_seq, old_tax, outdir)
+    # print("Decompressing input files...")
+    # export_database(old_seq, old_tax, outdir)
     unzipped_seq = outdir / "dna-sequences.fasta"
     unzipped_tax = outdir / "taxonomy.tsv"
 
     print("Appending sequences and taxonomy...")
-    append_entries(hits, unzipped_seq, unzipped_tax)
+    append_entries(hits, unzipped_seq, unzipped_tax, f_primer, r_primer)
 
-    print("Re-importing updated database...")
-    import_database(unzipped_seq, unzipped_tax, outdir)
+    # print("Re-importing updated database...")
+    # import_database(unzipped_seq, unzipped_tax, outdir)
 
     print("All done.")
 
