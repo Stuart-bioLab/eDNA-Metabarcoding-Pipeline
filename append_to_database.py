@@ -22,7 +22,7 @@ def search_name(name):
     """Seach for mitochondrial sequences associated with target taxon and get first 20 results."""
     handle = Entrez.esearch(
         db="nucleotide",
-        term=f"{name}[organism] AND mitochondrion[filter]",
+        term=f"{name}[organism] AND rrn12[gene]",
         retmax=20
     )
 
