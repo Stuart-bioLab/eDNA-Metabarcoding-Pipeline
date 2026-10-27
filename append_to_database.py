@@ -49,7 +49,7 @@ def fetch_seqs(name, ids, hits):
             if f.type == "source": # looking for taxonomy information
                 hits[name]["tax_id"] = f.qualifiers.get("db_xref")[0][6:] # just get the taxonomy id number
         if hits[name]["seq"]: # if 12S sequence found, exit loop
-            print(f"Foud 12S sequence for {name}.")
+            print(f"Found 12S sequence for {name}.")
             break
     else:
         print(f"Could not find sequence for {name}.")
