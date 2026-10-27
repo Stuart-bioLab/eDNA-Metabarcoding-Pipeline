@@ -13,7 +13,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-t", "--tax_file")
     parser.add_argument("-s", "--seq_file")
-    parser.add_argument("-i", "--id_list", nargs="+")
+    parser.add_argument("-i", "--names_list", nargs="+")
     args = parser.parse_args()
     return args
 
@@ -116,23 +116,27 @@ def main():
     args = get_args()
     old_tax = args.tax_file
     old_seq = args.seq_file
-    ids = args.id_list
+    names = args.names_list
+    if not names:
+        print("Please give taxa to search for with --names_list argument.")
+        sys.exit(1)
+
     outdir = Path("updated_database").resolve()
     outdir.mkdir(exist_ok=True)
 
     Entrez.email = "bmoginot5@gmail.com"
 
-    new_entries = fetch_seqs(ids)
-    tax_id_map = fetch_tax(new_entries)
+    new_entries = fetch_seqs(names)
+    # tax_id_map = fetch_tax(new_entries)
     
-    for record_id in new_entries.keys():
-        new_entries[record_id]["tax_str"] = tax_id_map[new_entries[record_id]["tax_id"]]
+    # for record_id in new_entries.keys():
+    #     new_entries[record_id]["tax_str"] = tax_id_map[new_entries[record_id]["tax_id"]]
 
-    export_database(old_seq, old_tax, outdir)
-    unzipped_seq = outdir / "dna-sequences.fasta"
-    unzipped_tax = outdir / "taxonomy.tsv"
-    append_entries(new_entries, unzipped_seq, unzipped_tax)
-    import_database(unzipped_seq, unzipped_tax, outdir)
+    # export_database(old_seq, old_tax, outdir)
+    # unzipped_seq = outdir / "dna-sequences.fasta"
+    # unzipped_tax = outdir / "taxonomy.tsv"
+    # append_entries(new_entries, unzipped_seq, unzipped_tax)
+    # import_database(unzipped_seq, unzipped_tax, outdir)
 
 if __name__ == "__main__":
     main()
