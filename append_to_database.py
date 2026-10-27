@@ -8,6 +8,7 @@ from Bio import Entrez, SeqIO
 from Bio.Seq import Seq
 import argparse
 from collections import defaultdict
+import edlib
 
 def get_args():
     """Parse command line arguments."""
@@ -29,7 +30,7 @@ def search_name(name):
     results = Entrez.read(handle)
     return results["IdList"]
 
-def fetch_seqs(name, ids, hits):
+def fetch_seq(name, ids, hits):
     """Iterate over IDs until a 12S sequence is found. Store record ID, taxonomy ID, and sequence"""
     handle = Entrez.efetch(
         db="nucleotide",
@@ -57,6 +58,16 @@ def fetch_seqs(name, ids, hits):
         del hits[name]
 
     return hits
+
+def find_v5(f_primer, r_primer, target_seq):
+    """Align primers to 12S sequence and slice out substring between them."""
+    result = edlib.align(f_primer, target_seq, mode="HW", task="path")
+    start = result["locations"][0][1] + 1
+
+    result = edlib.align(r_primer, target_seq, mode="HW", task="path")
+    end = result["locations"][0][0]
+
+    return target_seq[start:end]
 
 def fetch_tax(hits):
     """Get taxonomy information for extracted record."""
@@ -117,8 +128,7 @@ def append_entries(hits, seq_file, tax_file, f_primer, r_primer):
             print(hits[name])
             label = hits[name]["label"]
             seq = hits[name]["seq"]
-            v5_region = seq.split(f_primer)[-1].split(r_primer)[0] # this is really loosey-goosey
-            f.write(f">{label}\n{v5_region}\n")
+            f.write(f">{label}\n{seq}\n")
     
     with open(tax_file, "a") as f:
         for name in hits:
@@ -159,7 +169,7 @@ def main():
         sys.exit(1)
 
     f_primer = Seq("ACTGGGATTAGATACCCC")
-    r_primer = Seq("TAGAACAGGCTCCTCTAG").reverse_complement()[:-3]
+    r_primer = Seq("TAGAACAGGCTCCTCTAG").reverse_complement()
 
     outdir = Path("updated_database").resolve()
     outdir.mkdir(exist_ok=True)
@@ -171,21 +181,24 @@ def main():
     for name in names_to_search:
         print(f"Searching for {name}...")
         target_ids = search_name(name)
-        hits = fetch_seqs(name, target_ids, hits)
+        hits = fetch_seq(name, target_ids, hits)
+        if name in hits.keys():
+            print(f"Finding V5 region for {name}...")
+            hits[name]["seq"] = find_v5(f_primer, r_primer, hits[name]["seq"])
     
     print("Finding taxonomy for all entries...")
     hits = fetch_tax(hits)
 
-    # print("Decompressing input files...")
-    # export_database(old_seq, old_tax, outdir)
+    print("Decompressing input files...")
+    export_database(old_seq, old_tax, outdir)
     unzipped_seq = outdir / "dna-sequences.fasta"
     unzipped_tax = outdir / "taxonomy.tsv"
 
     print("Appending sequences and taxonomy...")
     append_entries(hits, unzipped_seq, unzipped_tax, f_primer, r_primer)
 
-    # print("Re-importing updated database...")
-    # import_database(unzipped_seq, unzipped_tax, outdir)
+    print("Re-importing updated database...")
+    import_database(unzipped_seq, unzipped_tax, outdir)
 
     print("All done.")
 
