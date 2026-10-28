@@ -16,6 +16,7 @@ def get_args():
     parser.add_argument("-t", "--tax_file")
     parser.add_argument("-s", "--seq_file")
     parser.add_argument("-n", "--names", nargs="+")
+    parser.add_argument("-e", "--email")
     args = parser.parse_args()
     return args
 
@@ -173,7 +174,10 @@ def main():
     outdir = Path("updated_database").resolve()
     outdir.mkdir(exist_ok=True)
 
-    Entrez.email = "bmoginot5@gmail.com"
+    Entrez.email = args.email
+    if not Entrez.email:
+        print("Plese supply Entrez with an email using --email argument.")
+        sys.exit(1)
 
     hits = defaultdict(lambda: {"record_id": None, "seq": None, "tax_id": None, "tax_str": None, "label": None})
 
