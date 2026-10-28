@@ -125,7 +125,6 @@ def append_entries(hits, seq_file, tax_file, f_primer, r_primer):
     """Add sequence and taxonomy for input records to respective file."""
     with open(seq_file, "a") as f:
         for name in hits:
-            print(hits[name])
             label = hits[name]["label"]
             seq = hits[name]["seq"]
             f.write(f">{label}\n{seq}\n")
