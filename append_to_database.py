@@ -9,6 +9,8 @@ from Bio.Seq import Seq
 import argparse
 from collections import defaultdict
 import edlib
+import pandas as pd
+from Bio.SeqIO.FastaIO import FastaWriter
 
 def get_args():
     """Parse command line arguments."""
@@ -184,8 +186,25 @@ def append(email, names_to_search, unzipped_seq, unzipped_tax):
     print("Appending sequences and taxonomy...")
     append_entries(hits, unzipped_seq, unzipped_tax, f_primer, r_primer)
 
-def remove():
-    print("remove")
+def remove(names_to_search, unzipped_seq, unzipped_tax, outdir):
+    tax_df = pd.read_csv(unzipped_tax, sep="\t")
+    tax_df["sp_name"] = tax_df["Taxon"].apply(lambda x: x.split(";g__")[-1].replace(";s__", " "))
+    target_rows = tax_df["sp_name"].isin(names_to_search)
+
+    pruned_tax_file = tax_df[~target_rows]
+    pruned_tax_file[["Feature ID", "Taxon"]].to_csv( outdir / "pruned_tax_file.tsv", sep="\t", index=False)
+
+    dropped_rows = tax_df[target_rows]
+    target_labels = dropped_rows["Feature ID"].to_list()
+
+    parsed_fasta = SeqIO.parse(unzipped_seq, format="fasta")
+    pruned_records = [record for record in parsed_fasta if record.name not in target_labels]
+
+    with open(outdir / "pruned_seq_file.fasta", "w") as f:
+        writer = FastaWriter(f, wrap=None)
+        writer.write_file(pruned_records)
+
+    return
 
 def main():
     args = get_args()
@@ -224,7 +243,7 @@ def main():
         append(args.email, names_to_search, unzipped_seq, unzipped_tax)
     
     if args.remove:
-        remove()
+        remove(names_to_search, unzipped_seq, unzipped_tax, outdir)
 
     # print("Re-importing updated database...")
     # import_database(unzipped_seq, unzipped_tax, outdir)
