@@ -185,25 +185,29 @@ def append(email, names_to_search, unzipped_seq, unzipped_tax):
     append_entries(hits, unzipped_seq, unzipped_tax, f_primer, r_primer)
 
 def remove():
-    pass
+    print("remove")
 
 def main():
     args = get_args()
 
     old_tax = args.tax_file
     if not old_tax:
-        old_tax = "picq_2024_12S_database/db_tax.qza"
+        old_tax = Path("picq_2024_12S_database/db_tax.qza")
 
     old_seq = args.seq_file
     if not old_seq:
-        old_seq = "picq_2024_12S_database/db_seq.qza"
+        old_seq = Path("picq_2024_12S_database/db_seq.qza")
 
     names_to_search = args.names
     if not names_to_search:
-        names_to_search = parse_names(args.file)
-        if not names_to_search:
+        if not args.file:
             print("Please give taxa to search for with either of the --names or --file arguments.")
             sys.exit(1)
+        infile = Path(args.file)
+        if not infile.exists():
+            print("Could not find file.")
+            sys.exit(1)
+        names_to_search = parse_names(infile)
 
     f_primer = Seq("ACTGGGATTAGATACCCC")
     r_primer = Seq("TAGAACAGGCTCCTCTAG").reverse_complement()
@@ -211,8 +215,8 @@ def main():
     outdir = Path("updated_database").resolve()
     outdir.mkdir(exist_ok=True)
 
-    print("Decompressing input files...")
-    export_database(old_seq, old_tax, outdir)
+    # print("Decompressing input files...")
+    # export_database(old_seq, old_tax, outdir)
     unzipped_seq = outdir / "dna-sequences.fasta"
     unzipped_tax = outdir / "taxonomy.tsv"
 
@@ -222,8 +226,8 @@ def main():
     if args.remove:
         remove()
 
-    print("Re-importing updated database...")
-    import_database(unzipped_seq, unzipped_tax, outdir)
+    # print("Re-importing updated database...")
+    # import_database(unzipped_seq, unzipped_tax, outdir)
 
     print("All done.")
 
