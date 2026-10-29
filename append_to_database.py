@@ -17,8 +17,18 @@ def get_args():
     parser.add_argument("-s", "--seq_file")
     parser.add_argument("-n", "--names", nargs="+")
     parser.add_argument("-e", "--email")
+    parser.add_argument("-a", "--append", action="store_true")
+    parser.add_argument("-r", "--remove", action="store_true")
+    parser.add_argument("-f", "--file")
     args = parser.parse_args()
     return args
+
+def parse_names(names_file):
+    """Get list of names from input file."""
+    with open(names_file, "r") as f:
+        names_list = [x.strip() for x in f.readlines()]
+
+    return names_list
 
 def search_name(name):
     """Seach for mitochondrial sequences associated with target taxon and get first 20 results."""
@@ -152,31 +162,10 @@ def import_database(seq_file, tax_file, outdir):
         "--output-path", outdir / "updated_tax"
     ])
 
-def main():
-    args = get_args()
-
-    old_tax = args.tax_file
-    if not old_tax:
-        old_tax = "picq_2024_12S_database/db_tax.qza"
-
-    old_seq = args.seq_file
-    if not old_seq:
-        old_seq = "picq_2024_12S_database/db_seq.qza"
-
-    names_to_search = args.names
-    if not names_to_search:
-        print("Please give taxa to search for with --names argument.")
-        sys.exit(1)
-
-    f_primer = Seq("ACTGGGATTAGATACCCC")
-    r_primer = Seq("TAGAACAGGCTCCTCTAG").reverse_complement()
-
-    outdir = Path("updated_database").resolve()
-    outdir.mkdir(exist_ok=True)
-
-    Entrez.email = args.email
+def append(email, names_to_search, unzipped_seq, unzipped_tax):
+    Entrez.email = email
     if not Entrez.email:
-        print("Plese supply Entrez with an email using --email argument.")
+        print("Please supply Entrez with an email using --email argument.")
         sys.exit(1)
 
     hits = defaultdict(lambda: {"record_id": None, "seq": None, "tax_id": None, "tax_str": None, "label": None})
@@ -192,13 +181,46 @@ def main():
     print("Finding taxonomy for all entries...")
     hits = fetch_tax(hits)
 
+    print("Appending sequences and taxonomy...")
+    append_entries(hits, unzipped_seq, unzipped_tax, f_primer, r_primer)
+
+def remove():
+    pass
+
+def main():
+    args = get_args()
+
+    old_tax = args.tax_file
+    if not old_tax:
+        old_tax = "picq_2024_12S_database/db_tax.qza"
+
+    old_seq = args.seq_file
+    if not old_seq:
+        old_seq = "picq_2024_12S_database/db_seq.qza"
+
+    names_to_search = args.names
+    if not names_to_search:
+        names_to_search = parse_names(args.file)
+        if not names_to_search:
+            print("Please give taxa to search for with either of the --names or --file arguments.")
+            sys.exit(1)
+
+    f_primer = Seq("ACTGGGATTAGATACCCC")
+    r_primer = Seq("TAGAACAGGCTCCTCTAG").reverse_complement()
+
+    outdir = Path("updated_database").resolve()
+    outdir.mkdir(exist_ok=True)
+
     print("Decompressing input files...")
     export_database(old_seq, old_tax, outdir)
     unzipped_seq = outdir / "dna-sequences.fasta"
     unzipped_tax = outdir / "taxonomy.tsv"
 
-    print("Appending sequences and taxonomy...")
-    append_entries(hits, unzipped_seq, unzipped_tax, f_primer, r_primer)
+    if args.append:
+        append(args.email, names_to_search, unzipped_seq, unzipped_tax)
+    
+    if args.remove:
+        remove()
 
     print("Re-importing updated database...")
     import_database(unzipped_seq, unzipped_tax, outdir)
