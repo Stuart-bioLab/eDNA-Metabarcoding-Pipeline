@@ -785,25 +785,25 @@ def decontam(logger, feat_tab, blank_metadata, outdir, final_out):
     ftab_drop_zeros.to_csv(ftab_drop_zeros_out, sep="\t")
     logger.info(f"Dropped taxa with zero counts and wrote out to {ftab_drop_zeros_out}")
 
-    contams = [ # contaminants or misassignments based on a look at all detected taxa
-        "Homo sapiens", # human
-        "Bos taurus", # cow
-        "Gallus gallus", # chicken
-        "Sus scrofa", # pig
-        "Felis catus", # cat
-        "Inia geoffrensis", # amazon river dolphin
-        "Sternopygus dariensis", # darien knifefish
-        "Amblydoras gonzalezi", # talking catfish
-        "Brycon", # south american characins
-        "Herichthys cyanoguttatus", # rio grande cichlid
-        "Scardinius erythrophthalmus", # common rudd
-        "Somateria mollissima", # common eider
-        "Numida meleagris", # helmeted guineafowl
-        "Sturnus vulgaris", # european starling
-        "Canis", # dogs
-        "Canidae", # dogs
-        "Gallinula chloropus" # common gallinule
-    ]
+    # contams = [ # contaminants or misassignments based on a look at all detected taxa
+    #     "Homo sapiens", # human
+    #     "Bos taurus", # cow
+    #     "Gallus gallus", # chicken
+    #     "Sus scrofa", # pig
+    #     "Felis catus", # cat
+    #     "Inia geoffrensis", # amazon river dolphin
+    #     "Sternopygus dariensis", # darien knifefish
+    #     "Amblydoras gonzalezi", # talking catfish
+    #     "Brycon", # south american characins
+    #     "Herichthys cyanoguttatus", # rio grande cichlid
+    #     "Scardinius erythrophthalmus", # common rudd
+    #     "Somateria mollissima", # common eider
+    #     "Numida meleagris", # helmeted guineafowl
+    #     "Sturnus vulgaris", # european starling
+    #     "Canis", # dogs
+    #     "Canidae", # dogs
+    #     "Gallinula chloropus" # common gallinule
+    # ]
 
     just_contams = ftab_drop_zeros[ftab_drop_zeros.index.isin(contams)]
     just_contams.to_csv(outdir / "feat_tab_contams.tsv", sep="\t")
