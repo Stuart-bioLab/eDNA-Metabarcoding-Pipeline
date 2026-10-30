@@ -1,4 +1,4 @@
-# Update picq database with space-separated list of species names
+# Remove or append species to picq database from list
 
 import subprocess
 import sys
