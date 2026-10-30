@@ -62,7 +62,7 @@ def subset_metadata(metadata, study, outdir):
 
 def find_read_files(data, outdir):
     """Search input dir for fastq files. Write out each read file paired with its prefix."""
-    exclude_dirs = {"trimmed", "mussel", "$RECYCLE.BIN", "extra", "Picq04_4.15.2026", "mitogenome_extra", "trimmed_fastq"} # ignore these directories for now
+    exclude_dirs = {"trimmed", "mussel", "$RECYCLE.BIN", "extra", "mitogenome_extra", "trimmed_fastq"} # ignore these directories for now
     read_paths = [ # get all fastq files from all subdirs
         p.resolve() for p in sorted(Path(data).rglob("*.fastq.gz")) # recursively extract all fastq files
         if exclude_dirs.isdisjoint(p.parts) # exclude paths that include above directories
