@@ -164,7 +164,7 @@ def import_database(seq_file, tax_file, outdir):
         "--output-path", outdir / "updated_tax"
     ])
 
-def append(email, names_to_search, unzipped_seq, unzipped_tax):
+def append(email, names_to_search, unzipped_seq, unzipped_tax, f_primer, r_primer):
     Entrez.email = email
     if not Entrez.email:
         print("Please supply Entrez with an email using --email argument.")
@@ -240,7 +240,7 @@ def main():
     unzipped_tax = outdir / "taxonomy.tsv"
 
     if args.append:
-        append(args.email, names_to_search, unzipped_seq, unzipped_tax)
+        append(args.email, names_to_search, unzipped_seq, unzipped_tax, f_primer, r_primer)
     
     if args.remove:
         remove(names_to_search, unzipped_seq, unzipped_tax, outdir)
