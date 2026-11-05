@@ -764,7 +764,7 @@ def filter_fblanks(logger, ftab, fblank_dict, outdir):
 
     return ftab_fb_clipped
 
-def decontam(logger, feat_tab, blank_metadata, outdir, final_out):
+def decontam(logger, feat_tab, blank_metadata, contams, outdir, final_out):
     """Subtract reads from extraction and field blanks."""
     logger.info("Starting decontamination")
     ftab_df = pd.read_csv(feat_tab, sep="\t", index_col="Taxon")
@@ -784,26 +784,6 @@ def decontam(logger, feat_tab, blank_metadata, outdir, final_out):
     ftab_drop_zeros_out = outdir / "ftab_drop_zeros.tsv"
     ftab_drop_zeros.to_csv(ftab_drop_zeros_out, sep="\t")
     logger.info(f"Dropped taxa with zero counts and wrote out to {ftab_drop_zeros_out}")
-
-    # contams = [ # contaminants or misassignments based on a look at all detected taxa
-    #     "Homo sapiens", # human
-    #     "Bos taurus", # cow
-    #     "Gallus gallus", # chicken
-    #     "Sus scrofa", # pig
-    #     "Felis catus", # cat
-    #     "Inia geoffrensis", # amazon river dolphin
-    #     "Sternopygus dariensis", # darien knifefish
-    #     "Amblydoras gonzalezi", # talking catfish
-    #     "Brycon", # south american characins
-    #     "Herichthys cyanoguttatus", # rio grande cichlid
-    #     "Scardinius erythrophthalmus", # common rudd
-    #     "Somateria mollissima", # common eider
-    #     "Numida meleagris", # helmeted guineafowl
-    #     "Sturnus vulgaris", # european starling
-    #     "Canis", # dogs
-    #     "Canidae", # dogs
-    #     "Gallinula chloropus" # common gallinule
-    # ]
 
     just_contams = ftab_drop_zeros[ftab_drop_zeros.index.isin(contams)]
     just_contams.to_csv(outdir / "feat_tab_contams.tsv", sep="\t")
@@ -964,7 +944,29 @@ def main():
     decontam_dir.mkdir()
     final_out_dir = outdir / "final_output" # store final abundance filtered tables here for intuitive access
     final_out_dir.mkdir()
-    decontam(logger, feat_tab_mapped, blank_metadata, decontam_dir, final_out_dir)
+
+    # contams = [ # contaminants or misassignments based on a look at all detected taxa
+    #     "Homo sapiens", # human
+    #     "Bos taurus", # cow
+    #     "Gallus gallus", # chicken
+    #     "Sus scrofa", # pig
+    #     "Felis catus", # cat
+    #     "Inia geoffrensis", # amazon river dolphin
+    #     "Sternopygus dariensis", # darien knifefish
+    #     "Amblydoras gonzalezi", # talking catfish
+    #     "Brycon", # south american characins
+    #     "Herichthys cyanoguttatus", # rio grande cichlid
+    #     "Scardinius erythrophthalmus", # common rudd
+    #     "Somateria mollissima", # common eider
+    #     "Numida meleagris", # helmeted guineafowl
+    #     "Sturnus vulgaris", # european starling
+    #     "Canis", # dogs
+    #     "Canidae", # dogs
+    #     "Gallinula chloropus" # common gallinule
+    # ]
+    contams = []
+
+    decontam(logger, feat_tab_mapped, blank_metadata, contams, decontam_dir, final_out_dir)
 
     logger.info("pipeline end")
 
