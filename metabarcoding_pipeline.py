@@ -136,7 +136,7 @@ def get_args(config):
     )
 
     parser.add_argument( # FOR DEVELOPMENT
-        "--map",
+        "--assign_tax",
         default=None
     )
 
@@ -852,7 +852,7 @@ def main():
         sys.exit(1)
     logger.info(f"loaded blank metadata: {blank_metadata}")
 
-    if not args.map:
+    if not args.assign_tax:
         if not args.archive: # only import reads if archive not supplied (this takes a while)
             reads_archive = Path(outdir / "reads.qza").resolve()
             if not args.manifest:
@@ -885,53 +885,49 @@ def main():
         dada_dir = outdir / "dada2" # store deniosing files here
         dada_dir.mkdir()
         asv_seqs, feat_table = denoise_reads(logger, trimmed_reads, dada_params, dada_dir)
-
-        vsearch_dir = outdir / "vsearch"
-        vsearch_dir.mkdir()
-        vsearch_out = run_vsearch(logger, asv_seqs, crabs_ref_tax, crabs_ref_seq, threads, vsearch_dir)
-
-        species_level = 7 # looking for exact matches all the way to species level
-        vsearch_unassigned_tax, vsearch_retained_tax = parse_output(logger, vsearch_out, vsearch_dir, species_level)
-        vsearch_unassigned_seq_archive = filter_seqs(logger, asv_seqs, vsearch_unassigned_tax, vsearch_dir)
-
-        bayes_dir = outdir / "bayes"
-        bayes_dir.mkdir()
-        bayes_out = run_nb_classifier(logger, vsearch_unassigned_seq_archive, crabs_ref_tax, crabs_ref_seq, threads, bayes_dir)
-
-        family_level = 5 # looking only above family level
-        bayes_unassigned_tax, bayes_retained_tax = parse_output(logger, bayes_out, bayes_dir, family_level)
-        bayes_unassigned_seq_archive = filter_seqs(logger, asv_seqs, bayes_unassigned_tax, bayes_dir)
-
-        blast_params = { # blast parameters from command line arguments
-            "perc_identity": args.perc_identity,
-            "query_cov": args.query_cov,
-            "max_accepts": args.max_accepts,
-            "threads": threads
-        }
-        blast_dir = outdir / "blast"
-        blast_dir.mkdir()
-        blast_out = run_blast(logger, bayes_unassigned_seq_archive, blast_ref_tax, blast_ref_seq, blast_params, blast_dir)
-
-        if blast_out.is_file(): # only run these if blast completes successfully
-            blast_unassigned_tax, blast_retained_tax = parse_output(logger, blast_out, blast_dir, family_level)
-            filter_seqs(logger, asv_seqs, blast_unassigned_tax, blast_dir)
-        else:
-            blast_retained_tax = None
-
-        tax_files = [
-            vsearch_retained_tax,
-            bayes_retained_tax,
-            blast_retained_tax
-        ]
-
+    
     else:
-        indir = Path(args.map)
-        tax_files = [
-            indir / "vsearch" / "vsearch_retained_tax.tsv",
-            indir / "bayes" / "nb_retained_tax.tsv",
-            indir / "blast" / "blast_retained_tax.tsv"
-        ]
-        feat_table = indir / "dada2" / "feat_table.qza"
+        dada_input_dir = Path(args.assign_tax)
+        asv_seqs = dada_input_dir / "asv_seqs.qza"
+        feat_table = dada_input_dir / "feat_table.qza"
+
+    vsearch_dir = outdir / "vsearch"
+    vsearch_dir.mkdir()
+    vsearch_out = run_vsearch(logger, asv_seqs, crabs_ref_tax, crabs_ref_seq, threads, vsearch_dir)
+
+    species_level = 7 # looking for exact matches all the way to species level
+    vsearch_unassigned_tax, vsearch_retained_tax = parse_output(logger, vsearch_out, vsearch_dir, species_level)
+    vsearch_unassigned_seq_archive = filter_seqs(logger, asv_seqs, vsearch_unassigned_tax, vsearch_dir)
+
+    bayes_dir = outdir / "bayes"
+    bayes_dir.mkdir()
+    bayes_out = run_nb_classifier(logger, vsearch_unassigned_seq_archive, crabs_ref_tax, crabs_ref_seq, threads, bayes_dir)
+
+    family_level = 5 # looking only above family level
+    bayes_unassigned_tax, bayes_retained_tax = parse_output(logger, bayes_out, bayes_dir, family_level)
+    bayes_unassigned_seq_archive = filter_seqs(logger, asv_seqs, bayes_unassigned_tax, bayes_dir)
+
+    blast_params = { # blast parameters from command line arguments
+        "perc_identity": args.perc_identity,
+        "query_cov": args.query_cov,
+        "max_accepts": args.max_accepts,
+        "threads": threads
+    }
+    blast_dir = outdir / "blast"
+    blast_dir.mkdir()
+    blast_out = run_blast(logger, bayes_unassigned_seq_archive, blast_ref_tax, blast_ref_seq, blast_params, blast_dir)
+
+    if blast_out.is_file(): # only run these if blast completes successfully
+        blast_unassigned_tax, blast_retained_tax = parse_output(logger, blast_out, blast_dir, family_level)
+        filter_seqs(logger, asv_seqs, blast_unassigned_tax, blast_dir)
+    else:
+        blast_retained_tax = None
+
+    tax_files = [
+        vsearch_retained_tax,
+        bayes_retained_tax,
+        blast_retained_tax
+    ]
 
     fishes = True if args.fishes else False # subset for only fishes if True
 
