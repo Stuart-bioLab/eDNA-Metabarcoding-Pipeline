@@ -941,26 +941,15 @@ def main():
     final_out_dir = outdir / "final_output" # store final abundance filtered tables here for intuitive access
     final_out_dir.mkdir()
 
-    # contams = [ # contaminants or misassignments based on a look at all detected taxa
-    #     "Homo sapiens", # human
-    #     "Bos taurus", # cow
-    #     "Gallus gallus", # chicken
-    #     "Sus scrofa", # pig
-    #     "Felis catus", # cat
-    #     "Inia geoffrensis", # amazon river dolphin
-    #     "Sternopygus dariensis", # darien knifefish
-    #     "Amblydoras gonzalezi", # talking catfish
-    #     "Brycon", # south american characins
-    #     "Herichthys cyanoguttatus", # rio grande cichlid
-    #     "Scardinius erythrophthalmus", # common rudd
-    #     "Somateria mollissima", # common eider
-    #     "Numida meleagris", # helmeted guineafowl
-    #     "Sturnus vulgaris", # european starling
-    #     "Canis", # dogs
-    #     "Canidae", # dogs
-    #     "Gallinula chloropus" # common gallinule
-    # ]
-    contams = []
+    contams = [ # contaminants or misassignments based on a look at all detected taxa
+        "Homo sapiens", # human
+        "Bos taurus", # cow
+        "Gallus gallus", # chicken
+        "Sus scrofa", # pig
+        "Felis catus", # cat
+        "Canis lupus familiaris", # dog
+        "Capra hircus" # goat
+    ]
 
     decontam(logger, feat_tab_mapped, blank_metadata, contams, decontam_dir, final_out_dir)
 
