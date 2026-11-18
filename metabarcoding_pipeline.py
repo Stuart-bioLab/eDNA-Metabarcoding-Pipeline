@@ -803,6 +803,41 @@ def decontam(logger, feat_tab, blank_metadata, contams, outdir, final_out):
     logger.info("DONE with decontamination")
     return
 
+def line_count(current_file):
+    result = subprocess.run(
+        [
+            "wc", "-l", current_file
+        ],
+        capture_output=True,
+        text=True
+    )
+
+    num_lines = result.stdout.split(" ")[0]
+
+    return str(int(num_lines) - 1)
+
+def generate_sum_stats(outfile, outdir):
+    dada2_asvs = line_count(outdir / "mapping_files" / "feat_table.tsv")
+    vsearch_asvs = line_count(outdir / "vsearch" / "vsearch_retained_tax.tsv")
+    bayes_asvs = line_count(outdir / "bayes" / "nb_retained_tax.tsv")
+    blast_asvs = line_count(outdir / "blast" / "blast_retained_tax.tsv")
+    total_asvs = line_count(outdir / "mapping_files" / "final_tax.tsv")
+    unique_taxa = line_count(outdir / "mapping_files" / "feat_tab_unique.tsv")
+    after_zeros = line_count(outdir / "decontam" / "ftab_drop_zeros.tsv")
+    after_contams = line_count(outdir / "decontam" / "ftab_drop_contams.tsv")
+    after_abun = line_count(outdir / "final_output" / "feat_tab_0.01_counts.tsv")
+
+    with open(outfile, "w") as f:
+        f.write(f"ASVs found by DADA2.................{dada2_asvs}\n")
+        f.write(f"ASVs assigned by vsearch............{vsearch_asvs}\n")
+        f.write(f"ASVs assigned by bayes..............{bayes_asvs}\n")
+        f.write(f"ASVs assigned by blast..............{blast_asvs}\n")
+        f.write(f"Total assigned ASVs.................{total_asvs}\n")
+        f.write(f"Total number taxa...................{unique_taxa}\n")
+        f.write(f"Taxa after subtracting blanks.......{after_zeros}\n")
+        f.write(f"Taxa after dropping contaminants....{after_contams}\n")
+        f.write(f"Taxa after abundance filtering......{after_abun}\n")
+
 def main():
     config = load_config("config.ini")
     args = get_args(config)
@@ -952,6 +987,10 @@ def main():
     ]
 
     decontam(logger, feat_tab_mapped, blank_metadata, contams, decontam_dir, final_out_dir)
+
+    sum_stats = outdir / "sum_stats.txt"
+    generate_sum_stats(sum_stats, outdir)
+    logger.info(f"Wrote summary stats to {sum_stats}")
 
     logger.info("pipeline end")
 
