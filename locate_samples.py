@@ -135,9 +135,7 @@ def write_sample_manifest(study_ids, reads_list, study, outdir):
     with open(outfile, "w") as f:
         f.write("sample-id\tforward-absolute-filepath\treverse-absolute-filepath\n")
         for v in filepath_dict.values():
-            sorted_filepaths = []
-            for filepath in sorted(v):
-                sorted_filepaths.append(filepath.replace("/mnt/d/", "/mnt/g/")) # data is mounted on a different drive on the PC
+            sorted_filepaths = sorted(v)
             for i in range(0, len(sorted_filepaths), 2):
                 forward_path = sorted_filepaths[i]
                 reverse_path = sorted_filepaths[i+1]
@@ -216,8 +214,6 @@ def append_extraction_blanks(input_manif, eblank_metadata, reads_list, study, ou
                 rep_id = split_path_name[1] if split_path_name[0].startswith("SP") else split_path_name[0] # get prefix from filepath (accounting for NWern sams that have SP- in front)
                 if "mussel" in rep_id: # not looking a mussel sams right now
                     continue
-                fpath = fpath.replace("/mnt/d/", "/mnt/g/") # data on the PC is stored in G:
-                rpath = rpath.replace("/mnt/d/", "/mnt/g/")
                 if rep_id not in seen_rep_ids: # don't repeat replicates
                     m.write(f"{rep_id}\t{fpath}\t{rpath}\n")
                     seen_rep_ids.append(rep_id)
