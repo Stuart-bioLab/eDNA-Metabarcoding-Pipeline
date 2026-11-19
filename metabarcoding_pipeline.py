@@ -553,7 +553,9 @@ def stitch_tax_files(logger, tax_files, fishes, outdir):
             .apply( # apply this to all rows in the Taxon col
                 lambda x: x.split(";")[2] # pull out the class level
             )
-            .str.contains("Actinopter") # check if the taxon is a fish
+            .apply(
+                lambda x: any(pattern in x for pattern in ["Actinopter", "Chondrich"]) # check if the taxon is a fish
+            )
         ]
     
     final_tax_tsv = outdir / "final_tax.tsv"
