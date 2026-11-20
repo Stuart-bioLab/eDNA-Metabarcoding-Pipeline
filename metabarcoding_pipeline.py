@@ -848,7 +848,8 @@ def main():
     else:
         outdir = Path(args.output).resolve()
         if outdir.is_dir():
-            shutil.rmtree(outdir)
+            logger.error(f"{outdir} already exists")
+            sys.exit(1)
         outdir.mkdir(parents=True)
     logger = setup_logger(outdir / "pipeline.log")
 
@@ -886,6 +887,9 @@ def main():
     blank_metadata = Path(args.blank_metadata).resolve()
     if not blank_metadata.is_file():
         logger.error(f"metadata {blank_metadata} not found")
+        sys.exit(1)
+    if not blank_metadata.name.endswith(".tsv"):
+        logger.error(f"metadata {blank_metadata} not in correct format")
         sys.exit(1)
     logger.info(f"loaded blank metadata: {blank_metadata}")
 
